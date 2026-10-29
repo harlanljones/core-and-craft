@@ -100,3 +100,86 @@ func TestNativeIDGolden(t *testing.T) {
 // goldenHex was computed independently in Python:
 // json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False).
 const goldenHex = "7d5123a3cb46a431"
+
+// questEvent is a valid quest.added from Harlan, ready to mutate.
+func questEvent() Event {
+	e := valid()
+	e.Kind, e.Subject, e.Source = "quest.added", "quest:typing-drill", Source{Via: "manual", Agent: "manual"}
+	e.Data = json.RawMessage(`{"title":"15 min typing drill","priority":1,"every":"daily","skill":"skill:typing","rule":"runs:1"}`)
+	return e
+}
+
+func TestQuestAndCheckinKindsAccepted(t *testing.T) {
+	cases := map[string]func(*Event){
+		"quest.added":         func(e *Event) {},
+		"quest.added minimal": func(e *Event) { e.Data = json.RawMessage(`{"title":"Call mom"}`) },
+		"agent proposes": func(e *Event) {
+			e.Source.Agent = "duet:competence"
+			e.Data = json.RawMessage(`{"title":"x","status":"proposed"}`)
+		},
+		"agent, no status": func(e *Event) { e.Source.Agent = "claude-code"; e.Data = json.RawMessage(`{"title":"x"}`) },
+		"quest.done":       func(e *Event) { e.Kind, e.Data = "quest.done", json.RawMessage(`{}`) },
+		"quest.accepted":   func(e *Event) { e.Kind, e.Data = "quest.accepted", json.RawMessage(`{}`) },
+		"quest.declined":   func(e *Event) { e.Kind, e.Data = "quest.declined", json.RawMessage(`{"reason":"not now"}`) },
+		"quest.dropped":    func(e *Event) { e.Kind, e.Data = "quest.dropped", json.RawMessage(`{}`) },
+		"quest.snoozed":    func(e *Event) { e.Kind, e.Data = "quest.snoozed", json.RawMessage(`{"until":"2026-11-02"}`) },
+		"quest.edited": func(e *Event) {
+			e.Kind, e.Data = "quest.edited", json.RawMessage(`{"priority":3,"every":"weekly:sun"}`)
+		},
+		"checkin.asked": func(e *Event) {
+			e.Kind, e.Subject, e.Data = "checkin.asked", "checkin:sleep-window", json.RawMessage(`{"question":"What's your target sleep window?"}`)
+		},
+		"checkin.answered": func(e *Event) {
+			e.Kind, e.Subject, e.Data = "checkin.answered", "checkin:sleep-window", json.RawMessage(`{"text":"22:30 to 06:30"}`)
+		},
+		"day.rested":               func(e *Event) { e.Kind, e.Subject, e.Data = "day.rested", "day:2026-10-29", json.RawMessage(`{}`) },
+		"quest.added minutes rule": func(e *Event) { e.Data = json.RawMessage(`{"title":"Read","skill":"skill:latin","rule":"minutes:15"}`) },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			e := questEvent()
+			mutate(&e)
+			if err := Validate(e, true); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestQuestAndCheckinKindsRejected(t *testing.T) {
+	cases := map[string]func(*Event){
+		"no title":           func(e *Event) { e.Data = json.RawMessage(`{"priority":1}`) },
+		"blank title":        func(e *Event) { e.Data = json.RawMessage(`{"title":"  "}`) },
+		"priority 0":         func(e *Event) { e.Data = json.RawMessage(`{"title":"x","priority":0}`) },
+		"priority 1.5":       func(e *Event) { e.Data = json.RawMessage(`{"title":"x","priority":1.5}`) },
+		"bad every":          func(e *Event) { e.Data = json.RawMessage(`{"title":"x","every":"hourly"}`) },
+		"rule without skill": func(e *Event) { e.Data = json.RawMessage(`{"title":"x","rule":"runs:1"}`) },
+		"bad rule":           func(e *Event) { e.Data = json.RawMessage(`{"title":"x","skill":"skill:typing","rule":"runs:0"}`) },
+		"bad skill":          func(e *Event) { e.Data = json.RawMessage(`{"title":"x","skill":"typing"}`) },
+		"bad status":         func(e *Event) { e.Data = json.RawMessage(`{"title":"x","status":"done"}`) },
+		"agent self-activates": func(e *Event) {
+			e.Source.Agent = "duet:faith"
+			e.Data = json.RawMessage(`{"title":"x","status":"active"}`)
+		},
+		"quest kind, skill subject": func(e *Event) { e.Subject = "skill:typing" },
+		"snooze no until":           func(e *Event) { e.Kind, e.Data = "quest.snoozed", json.RawMessage(`{}`) },
+		"snooze bad until":          func(e *Event) { e.Kind, e.Data = "quest.snoozed", json.RawMessage(`{"until":"soon"}`) },
+		"edit nothing":              func(e *Event) { e.Kind, e.Data = "quest.edited", json.RawMessage(`{}`) },
+		"edit bad every":            func(e *Event) { e.Kind, e.Data = "quest.edited", json.RawMessage(`{"every":"sometimes"}`) },
+		"ask no question":           func(e *Event) { e.Kind, e.Subject, e.Data = "checkin.asked", "checkin:x", json.RawMessage(`{}`) },
+		"answer no text": func(e *Event) {
+			e.Kind, e.Subject, e.Data = "checkin.answered", "checkin:x", json.RawMessage(`{"text":""}`)
+		},
+		"checkin on quest": func(e *Event) { e.Kind, e.Data = "checkin.asked", json.RawMessage(`{"question":"?"}`) },
+		"rest bad subject": func(e *Event) { e.Kind, e.Subject, e.Data = "day.rested", "day:today", json.RawMessage(`{}`) },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			e := questEvent()
+			mutate(&e)
+			if Validate(e, true) == nil {
+				t.Fatal("want error")
+			}
+		})
+	}
+}
