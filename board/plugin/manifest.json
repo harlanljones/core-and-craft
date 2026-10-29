@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "id": "harlan.lifequest",
-  "name": "Life Quest",
+  "id": "harlan.core-and-craft",
+  "name": "CORE & CRAFT",
   "version": "0.2.0",
   "author": "Harlan Jones",
   "license": "MIT",
-  "description": "The CORE & CRAFT board: OWL widgets (Omalauncher's widget language) on the wallpaper, in the Omarchy theme, fed by lq's snapshot.json.",
-  "keywords": ["widgets", "desktop", "owl", "omalauncher", "lifequest", "core-and-craft"],
+  "description": "The CORE & CRAFT board: OWL widgets (Omalauncher's widget language) on the wallpaper, in the Omarchy theme, fed by acta's snapshot.json.",
+  "keywords": ["widgets", "desktop", "owl", "omalauncher", "core-and-craft", "acta"],
   "kinds": ["panel"],
   "keepLoaded": true,
   "entryPoints": {

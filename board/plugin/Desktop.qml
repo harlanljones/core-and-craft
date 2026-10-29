@@ -27,14 +27,14 @@ Item {
   readonly property string stateHome: Quickshell.env("XDG_STATE_HOME") || root.home + "/.local/state"
   readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME") || root.home + "/.config"
   // Your widgets: drop or edit any .owl here and it reloads as you save.
-  readonly property string widgetDir: Quickshell.env("LIFEQUEST_WIDGETS") || root.configHome + "/lifequest/widgets"
+  readonly property string widgetDir: Quickshell.env("ACTA_WIDGETS") || root.configHome + "/core-and-craft/widgets"
 
   // ---------------------------------------------------------------- settings
-  // Override in ~/.config/lifequest/board.json:
+  // Override in ~/.config/core-and-craft/board.json:
   //   {"side": "right", "columns": 6, "cell": 96, "margin": 24, "opacity": 0.88, "screens": ["DP-1"]}
   property var cfg: ({})
   FileView {
-    path: root.configHome + "/lifequest/board.json"
+    path: root.configHome + "/core-and-craft/board.json"
     watchChanges: true
     printErrors: false
     onFileChanged: reload()
@@ -59,7 +59,7 @@ Item {
     // Follow the shell's font (Omarchy's `omarchy-font-set` changes it).
     monoFamily: Style.font.family
     iconFamily: Style.font.family
-    stateDir: root.stateHome + "/lifequest/owl"
+    stateDir: root.stateHome + "/core-and-craft/owl"
   }
 
   Variants {
@@ -77,7 +77,7 @@ Item {
         color: "transparent"
         anchors { top: true; bottom: true; left: true; right: true }
 
-        WlrLayershell.namespace: "lifequest"
+        WlrLayershell.namespace: "core-and-craft"
         WlrLayershell.layer: WlrLayer.Bottom
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
         exclusionMode: ExclusionMode.Normal

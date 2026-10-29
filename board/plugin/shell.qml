@@ -1,10 +1,10 @@
 // The same board without omarchy-shell: Omarchy 3.x (waybar era), or any
 // Hyprland/wlroots session with Quickshell installed.
 //
-//   quickshell -p ~/.config/lifequest/plugin/shell.qml
+//   quickshell -p ~/.config/core-and-craft/plugin/shell.qml
 //
 // Autostart on Omarchy 3.x: add to ~/.config/hypr/autostart.conf
-//   exec-once = quickshell -p ~/.config/lifequest/plugin/shell.qml
+//   exec-once = quickshell -p ~/.config/core-and-craft/plugin/shell.qml
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -18,11 +18,11 @@ ShellRoot {
   readonly property string home: Quickshell.env("HOME") || ""
   readonly property string stateHome: Quickshell.env("XDG_STATE_HOME") || root.home + "/.local/state"
   readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME") || root.home + "/.config"
-  readonly property string widgetDir: Quickshell.env("LIFEQUEST_WIDGETS") || root.configHome + "/lifequest/widgets"
+  readonly property string widgetDir: Quickshell.env("ACTA_WIDGETS") || root.configHome + "/core-and-craft/widgets"
 
   property var cfg: ({})
   FileView {
-    path: root.configHome + "/lifequest/board.json"
+    path: root.configHome + "/core-and-craft/board.json"
     watchChanges: true
     printErrors: false
     onFileChanged: reload()
@@ -53,7 +53,7 @@ ShellRoot {
     id: owlHost
     monoFamily: root.opt("font", "JetBrainsMono Nerd Font")
     iconFamily: root.opt("font", "JetBrainsMono Nerd Font")
-    stateDir: root.stateHome + "/lifequest/owl"
+    stateDir: root.stateHome + "/core-and-craft/owl"
   }
 
   Variants {
@@ -65,7 +65,7 @@ ShellRoot {
         screen: modelData
         color: "transparent"
         anchors { top: true; bottom: true; left: true; right: true }
-        WlrLayershell.namespace: "lifequest"
+        WlrLayershell.namespace: "core-and-craft"
         WlrLayershell.layer: WlrLayer.Bottom
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
         exclusionMode: ExclusionMode.Normal
@@ -93,7 +93,7 @@ ShellRoot {
   }
 
   IpcHandler {
-    target: "lifequest"
+    target: "core-and-craft"
     function reload(): string { Quickshell.reload(true); return "ok" }
   }
 }

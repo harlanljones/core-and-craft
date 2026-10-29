@@ -26,7 +26,7 @@ make install-units                           # daily 23:30 pull + rebuild on cha
 Board (Omarchy 4):
 
 ```sh
-make check-widgets install-board   # plugin harlan.lifequest + ~/.config/lifequest/widgets/
+make check-widgets install-board   # plugin harlan.core-and-craft + ~/.config/core-and-craft/widgets/
 ```
 
 Create the ApeKey in Monkeytype's account settings and enable it. The key is read from the env file or a systemd credential named `monkeytype`; it is never put in a URL, a log line or an error.

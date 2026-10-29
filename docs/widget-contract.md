@@ -37,6 +37,6 @@ Widgets never read `events.jsonl`. They read `$LQ_STATE/snapshot.json` (default 
 
 ## Tiles
 
-`widgets/60-typing.owl` (3x2) reads `file("~/.local/state/lifequest/snapshot.json") json`. It shows the best qualifying wpm with the target, `runs_qualifying/runs_total`, today's best and count, a progress bar when a target is set, and a 30-character strip of `daily`, one character per day. `make check-widgets` renders every tile against the seed, the seed plus a target, and a missing snapshot.
+`widgets/60-typing.owl` (3x2) reads `file("~/.local/state/core-and-craft/snapshot.json") json`. It shows the best qualifying wpm with the target, `runs_qualifying/runs_total`, today's best and count, a progress bar when a target is set, and a 30-character strip of `daily`, one character per day. `make check-widgets` renders every tile against the seed, the seed plus a target, and a missing snapshot.
 
 A tile reads the default path. A board running with `LQ_STATE` set elsewhere has to edit the tile's path.

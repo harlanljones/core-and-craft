@@ -8,7 +8,7 @@ widget "typing" {
 
   // The widget contract (docs/widget-contract.md): read snapshot.json, never
   // events.jsonl. lq snapshot replaces it atomically, so it is always whole.
-  source s = file("~/.local/state/lifequest/snapshot.json") json
+  source s = file("~/.local/state/core-and-craft/snapshot.json") json
 
   let sk = (s.skills ?? []).filter(k => k.id == "skill:typing").first()
   let daily = sk.daily ?? []
