@@ -146,3 +146,53 @@ func TestToEvent(t *testing.T) {
 		t.Fatalf("data %s", ev.Data)
 	}
 }
+
+// The API returns results as stored, with default settings left out
+// (backend/src/utils/result.ts buildDbResult). ToEvent puts them back so
+// the run can match a protocol.
+func TestToEventFillsOmittedDefaults(t *testing.T) {
+	m := map[string]any{
+		"_id": "r0001", "timestamp": json.Number("1761700000000"),
+		"wpm": json.Number("90"), "acc": json.Number("98"), "mode": "time", "mode2": "60",
+	}
+	ev, err := ToEvent(m, time.UTC, time.Date(2026, 10, 29, 18, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(ev.Data, &got); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{
+		"language": "english", "punctuation": false, "numbers": false,
+		"lazyMode": false, "bailedOut": false, "difficulty": "normal",
+		"isPb": false, "restartCount": float64(0), "incompleteTestSeconds": float64(0),
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s: got %v, want %v", k, got[k], v)
+		}
+	}
+	if fb, ok := got["funbox"].([]any); !ok || len(fb) != 0 {
+		t.Errorf("funbox: got %v, want []", got["funbox"])
+	}
+}
+
+func TestToEventKeepsNonDefaults(t *testing.T) {
+	r := result(1, 1_761_700_000_000)
+	r["language"], r["punctuation"], r["funbox"] = "german", true, []string{"mirror"}
+	raw, _ := json.Marshal(r)
+	var m map[string]any
+	dec := json.NewDecoder(strings.NewReader(string(raw)))
+	dec.UseNumber()
+	dec.Decode(&m)
+	ev, err := ToEvent(m, time.UTC, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []string{`"language":"german"`, `"punctuation":true`, `"funbox":["mirror"]`} {
+		if !strings.Contains(string(ev.Data), s) {
+			t.Errorf("data %s lacks %s", ev.Data, s)
+		}
+	}
+}

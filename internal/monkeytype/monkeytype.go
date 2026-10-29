@@ -24,8 +24,9 @@ const (
 	DefaultBaseURL = "https://api.monkeytype.com"
 	// PageSize matches Monkeytype's documented batch cap of 1,000.
 	PageSize = 1000
-	// sinceParam is the lower-bound filter. Results are deduped by id, so if
-	// the API ignores it the pull still works; it just reads more.
+	// sinceParam is the lower-bound filter (GetResultsQuerySchema in
+	// Monkeytype's packages/contracts/src/results.ts). The query schema is
+	// strict, so an unknown name fails the request rather than being ignored.
 	sinceParam = "onOrAfterTimestamp"
 )
 
@@ -133,6 +134,18 @@ var keep = []string{
 	"incompleteTestSeconds",
 }
 
+// defaults are the values the API leaves out of a stored result (see
+// buildDbResult in Monkeytype's backend/src/utils/result.ts). ToEvent puts
+// them back so the event says what was run and protocol matching works.
+func defaults() map[string]any {
+	return map[string]any{
+		"language": "english", "punctuation": false, "numbers": false,
+		"lazyMode": false, "bailedOut": false, "difficulty": "normal",
+		"funbox": []any{}, "isPb": false, "restartCount": 0,
+		"incompleteTestSeconds": 0,
+	}
+}
+
 func millis(m map[string]any) int64 {
 	switch v := m["timestamp"].(type) {
 	case json.Number:
@@ -158,7 +171,7 @@ func ToEvent(m map[string]any, loc *time.Location, now time.Time) (event.Event, 
 	if ms == 0 {
 		return event.Event{}, fmt.Errorf("monkeytype: result %s without timestamp", id)
 	}
-	data := map[string]any{}
+	data := defaults()
 	for _, k := range keep {
 		if v, ok := m[k]; ok {
 			data[k] = v

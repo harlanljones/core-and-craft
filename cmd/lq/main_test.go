@@ -202,3 +202,30 @@ func TestMtPullReadsSystemdCredential(t *testing.T) {
 		t.Fatal("credential not read")
 	}
 }
+
+// Real results come back with default settings left out. After the seed
+// sets the protocol, pulled runs must still qualify.
+func TestMtPullStrippedResultsQualify(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data := []map[string]any{{
+			"_id": "res0", "timestamp": 1_761_750_000_000, "wpm": 95, "acc": 98,
+			"mode": "time", "mode2": "60",
+		}}
+		json.NewEncoder(w).Encode(map[string]any{"message": "ok", "data": data})
+	}))
+	defer srv.Close()
+
+	e, _, _ := testEnv(t, map[string]string{"MONKEYTYPE_APE_KEY": key})
+	e.mtBaseURL = srv.URL
+	mustRun(t, e, "init")
+	seed, _ := filepath.Glob("../../seed/*.jsonl")
+	b, _ := os.ReadFile(seed[0])
+	os.WriteFile(filepath.Join(e.inboxDir(), filepath.Base(seed[0])), b, 0o644)
+	mustRun(t, e, "ingest")
+	mustRun(t, e, "mt", "pull")
+	mustRun(t, e, "snapshot")
+	sk := readSnapshot(t, e).Skills[0]
+	if sk.RunsQualifying != 3 || *sk.Best != 95 {
+		t.Fatalf("pulled run should qualify: qualifying %d, best %v", sk.RunsQualifying, *sk.Best)
+	}
+}

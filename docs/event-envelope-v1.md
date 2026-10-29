@@ -35,7 +35,7 @@ body = {"agent": a, "at": at, "data": data, "kind": kind, "recorded_at": rec, "s
 - `skill.defined` `{name, domain, metric, unit, direction, baseline}`
 - `skill.protocol_set` `{mode, mode2, language, punctuation, numbers, funbox, lazyMode, min_acc, ...}`: the settings a run must match to count
 - `skill.target_set` `{metric, target, min_acc?, sustain_runs? (3), sustain_days? (7)}`
-- `typing.test`: Monkeytype field names `{wpm, rawWpm, acc, consistency, mode, mode2, language, punctuation, numbers, difficulty, lazyMode, funbox, testDuration, charStats, isPb, bailedOut, restartCount, incompleteTestSeconds}`. Chat-logged runs carry what a screenshot shows, plus `run`.
+- `typing.test`: Monkeytype field names `{wpm, rawWpm, acc, consistency, mode, mode2, language, punctuation, numbers, difficulty, lazyMode, funbox, testDuration, charStats, isPb, bailedOut, restartCount, incompleteTestSeconds}`. Chat-logged runs carry what a screenshot shows, plus `run`. `lq mt pull` fills in the defaults the API leaves out of stored results (`language: english`, `punctuation`/`numbers`/`lazyMode`/`bailedOut: false`, `funbox: []`, `difficulty: normal`), so every archived run states its settings.
 - `typing.keystats` `{key, hits, misses, avg_ms}`: reserved; Monkeytype results carry no per-key data
 - `study.session` `{minutes, subject, kind}`
 - `note.added` `{path, title, sha256, from_pillar, sessions}`
