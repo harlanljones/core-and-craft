@@ -1,0 +1,52 @@
+widget "typing" {
+  page: 1
+  order: 6
+  size: 3x2
+  minSize: 3x2
+
+  meta { owl: 10; description: "Typing (competence): best qualifying wpm, the target, today's runs and the last 30 days"; version: "0.1"; license: "MIT"; category: "productivity" }
+
+  // The widget contract (docs/widget-contract.md): read snapshot.json, never
+  // events.jsonl. lq snapshot replaces it atomically, so it is always whole.
+  source s = file("~/.local/state/lifequest/snapshot.json") json
+
+  let sk = (s.skills ?? []).filter(k => k.id == "skill:typing").first()
+  let daily = sk.daily ?? []
+  let bests = daily.filter(d => d.best != null).map(d => d.best)
+  let lo = len(bests) > 0 ? min(bests) : 0
+  let hi = len(bests) > 0 ? max(bests) : 0
+  let blocks = "▁▂▃▄▅▆▇█"
+  // One character per day, oldest first: · for no qualifying run, a block
+  // scaled between the window's lowest and highest best.
+  // With no spread yet (one day, or every day equal), a full block.
+  let levels = daily.map(d => d.best == null ? -1 : hi == lo ? 7 : clamp(floor((d.best - lo) / (hi - lo) * 7.99), 0, 7))
+  let strip = levels.map(l => l < 0 ? "·" : sub(blocks, l, l + 1)).join("")
+
+  Column {
+    gap: 4
+    fill: true
+    Row {
+      Text { text: "⌨ typing"; style: muted; font: mono; weight: 1 }
+      if len(s.errors ?? []) > 0 {
+        Text { text: "●"; style: small; font: mono; color: red }
+      }
+      if sk.passed == true {
+        Text { text: "passed"; style: small; font: mono; color: green }
+      } else {
+        Text { text: "${sk.runs_qualifying ?? 0}/${sk.runs_total ?? 0} ≥${sk.min_acc ?? 97}%"; style: small; font: mono; color: muted }
+      }
+    }
+    Row {
+      gap: 8
+      align: bottom
+      // null renders as a dash, never 0.
+      Text { text: sk.best == null ? "–" : "${sk.best}"; style: title; font: mono; color: accent }
+      Text { text: sk.target == null ? "wpm" : "/${sk.target} wpm"; style: small; font: mono; color: muted; weight: 1 }
+      Text { text: "today ${sk.today_best ?? "–"} · ${s.today.typing_tests ?? 0}"; style: small; font: mono; color: foreground }
+    }
+    if sk.target != null {
+      Progress { value: sk.best ?? 0; max: sk.target; color: sk.passed == true ? green : accent; animate value: spring() }
+    }
+    Text { text: strip; style: small; font: mono; color: green; maxLines: 1 }
+  }
+}

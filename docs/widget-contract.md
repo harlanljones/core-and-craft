@@ -35,6 +35,8 @@ Widgets never read `events.jsonl`. They read `$LQ_STATE/snapshot.json` (default 
 
 `lq status` prints one line, e.g. `typing 88/100 wpm · 5 today`; `lq status --json` prints the snapshot.
 
-## Not in this PR
+## Tiles
 
-The OWL tile itself. The board's OWL runtime and existing tiles live in `~/dev/omarchy-widgets`, which isn't in this repo yet, so a tile written here would be guessed against an unseen API. Port the plugin in, then add `widgets/60-typing.owl` against this contract.
+`widgets/60-typing.owl` (3x2) reads `file("~/.local/state/lifequest/snapshot.json") json`. It shows the best qualifying wpm with the target, `runs_qualifying/runs_total`, today's best and count, a progress bar when a target is set, and a 30-character strip of `daily`, one character per day. `make check-widgets` renders every tile against the seed, the seed plus a target, and a missing snapshot.
+
+A tile reads the default path. A board running with `LQ_STATE` set elsewhere has to edit the tile's path.
