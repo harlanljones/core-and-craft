@@ -140,3 +140,34 @@ func TestDailySeriesAndPillars(t *testing.T) {
 		t.Fatalf("pillars %+v", s.Pillars)
 	}
 }
+
+// mt adds an imported Monkeytype run, as lq mt pull writes it.
+func (b *builder) mt(at string, data string) {
+	n := len(b.evs) + 1
+	b.evs = append(b.evs, event.Event{
+		ID: fmt.Sprintf("mt:r%04d", n), V: 1, At: at, AtPrecision: event.PrecisionSecond, Seq: int64(n),
+		RecordedAt: "2026-10-29T23:30:00Z", Pillar: "competence", Kind: "typing.test",
+		Subject: "skill:typing", Source: event.Source{Via: "monkeytype-api", Agent: "lq-mt"},
+		Data: json.RawMessage(data),
+	})
+}
+
+// A run logged from a screenshot and the same run pulled from Monkeytype
+// count once; the import wins. Each import stands in for one hand-logged run.
+func TestImportedRunShadowsScreenshotCopy(t *testing.T) {
+	b := base()
+	b.add("typing.test", "2026-10-29", runData(85, 97, ""))
+	b.add("typing.test", "2026-10-29", runData(88, 97, ""))
+	b.add("typing.test", "2026-10-29", runData(88, 97, "")) // a second, different 88/97 run
+	b.add("typing.test", "2026-10-28", runData(85, 97, "")) // another day
+	b.mt("2026-10-29T10:00:00-07:00", runData(85.4, 97.2, ""))
+	b.mt("2026-10-29T10:05:00-07:00", runData(87.6, 96.8, ""))
+	sk := typing(t, Build(b.evs, nil, Source{}, now, la))
+	// 85 and one 88 are shadowed: left are the second 88, Oct 28's 85 and both imports.
+	if sk.RunsTotal != 4 || sk.RunsQualifying != 3 {
+		t.Fatalf("total %d qualifying %d", sk.RunsTotal, sk.RunsQualifying)
+	}
+	if s := Build(b.evs, nil, Source{}, now, la); s.Today.TypingTests != 3 {
+		t.Fatalf("today %d", s.Today.TypingTests)
+	}
+}
