@@ -60,7 +60,7 @@ internal/event/       v1 envelope, validation, ids
 internal/store/       flock append, scanning
 internal/monkeytype/  ApeKey client and result mapping
 internal/snapshot/    fold into snapshot.json (gate, sustain, daily series, pillars)
-systemd/              user units: daily pull, rebuild on change
+systemd/              user units: daily pull, Drive inbox pull, rebuild on change
 board/plugin/         Omarchy 4 shell plugin: the board, vendored OWL runtime (owl/)
 board/test/           check.sh renders every widget under node against acta-built snapshots
 widgets/              OWL tiles the board shows (60-typing.owl)

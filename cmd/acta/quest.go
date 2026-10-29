@@ -165,7 +165,7 @@ func questChange(e env, verb, arg string, args []string) error {
 		if *agent != "manual" {
 			return fmt.Errorf("only manual can %s a proposed quest", verb)
 		}
-		kind += "ed"
+		kind = "quest." + verb + map[string]string{"accept": "ed", "decline": "d"}[verb]
 	case "drop":
 		if q.Status == "dropped" {
 			return fmt.Errorf("%s is already dropped", q.ID)
