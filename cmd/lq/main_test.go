@@ -229,3 +229,30 @@ func TestMtPullStrippedResultsQualify(t *testing.T) {
 		t.Fatalf("pulled run should qualify: qualifying %d, best %v", sk.RunsQualifying, *sk.Best)
 	}
 }
+
+// Pulling a run already logged from a screenshot must not count it twice.
+func TestMtPullOfScreenshotRunCountsOnce(t *testing.T) {
+	la, _ := time.LoadLocation("America/Los_Angeles")
+	ts := time.Date(2026, 10, 29, 10, 0, 0, 0, la).UnixMilli()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Seed run 5 (88 wpm, 97% acc) as Monkeytype has it.
+		data := []map[string]any{{"_id": "res5", "timestamp": ts, "wpm": 88.21, "acc": 97.14, "mode": "time", "mode2": "60"}}
+		json.NewEncoder(w).Encode(map[string]any{"message": "ok", "data": data})
+	}))
+	defer srv.Close()
+
+	e, _, _ := testEnv(t, map[string]string{"MONKEYTYPE_APE_KEY": key})
+	e.mtBaseURL = srv.URL
+	mustRun(t, e, "init")
+	seed, _ := filepath.Glob("../../seed/*.jsonl")
+	b, _ := os.ReadFile(seed[0])
+	os.WriteFile(filepath.Join(e.inboxDir(), filepath.Base(seed[0])), b, 0o644)
+	mustRun(t, e, "ingest")
+	mustRun(t, e, "mt", "pull")
+	mustRun(t, e, "snapshot")
+	s := readSnapshot(t, e)
+	sk := s.Skills[0]
+	if sk.RunsTotal != 5 || sk.RunsQualifying != 2 || s.Today.TypingTests != 5 || *sk.Best != 88.2 {
+		t.Fatalf("total %d qualifying %d today %d best %v", sk.RunsTotal, sk.RunsQualifying, s.Today.TypingTests, *sk.Best)
+	}
+}

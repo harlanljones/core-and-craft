@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/harlanljones/core-and-craft/internal/event"
@@ -106,6 +107,51 @@ func Effective(evs []event.Event) []event.Event {
 	return out
 }
 
+// imported reports whether a typing.test came from the Monkeytype archiver.
+func imported(e event.Event) bool {
+	return strings.HasPrefix(e.ID, "mt:")
+}
+
+// Unshadowed drops each hand-logged typing.test (a run read off a
+// screenshot in chat, say) that an imported Monkeytype run repeats: same
+// subject, same local date, same wpm and acc rounded to whole numbers, as
+// Monkeytype's result screen shows them. Each import stands in for at most
+// one hand-logged run, and the import wins, since it carries the exact
+// numbers. The log keeps both; only the fold counts one.
+func Unshadowed(live []event.Event, loc *time.Location) []event.Event {
+	key := func(e event.Event) (string, bool) {
+		m := decode(e.Data)
+		wpm, ok1 := num(m["wpm"])
+		acc, ok2 := num(m["acc"])
+		if !ok1 || !ok2 {
+			return "", false
+		}
+		return fmt.Sprintf("%s|%s|%.0f|%.0f", e.Subject, e.LocalDate(loc), math.Round(wpm), math.Round(acc)), true
+	}
+	imports := map[string]int{}
+	for _, e := range live {
+		if e.Kind == "typing.test" && imported(e) {
+			if k, ok := key(e); ok {
+				imports[k]++
+			}
+		}
+	}
+	if len(imports) == 0 {
+		return live
+	}
+	out := make([]event.Event, 0, len(live))
+	for _, e := range live {
+		if e.Kind == "typing.test" && !imported(e) {
+			if k, ok := key(e); ok && imports[k] > 0 {
+				imports[k]--
+				continue
+			}
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
 func decode(raw json.RawMessage) map[string]any {
 	m := map[string]any{}
 	_ = json.Unmarshal(raw, &m)
@@ -179,6 +225,7 @@ func round1(f float64) *float64 {
 func Build(evs []event.Event, bad []store.LineError, src Source, now time.Time, loc *time.Location) Snapshot {
 	live := Effective(evs)
 	sort.SliceStable(live, func(i, j int) bool { return live[i].Seq < live[j].Seq })
+	live = Unshadowed(live, loc)
 	today := now.In(loc).Format("2006-01-02")
 
 	snap := Snapshot{

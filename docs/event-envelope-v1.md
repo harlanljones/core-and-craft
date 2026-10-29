@@ -54,4 +54,6 @@ Cloud agents (Claude Duet channels) can't take the lock. They write whole files 
 
 ## Mastery (day one: performance skills)
 
+A hand-logged `typing.test` (a screenshot read in chat) that an imported Monkeytype run repeats, with the same subject, local date, and wpm and acc rounded to whole numbers, is counted once, as the import. Each import stands in for at most one hand-logged run. Both stay in the log, so nothing needs retracting after the first pull.
+
 A `typing.test` qualifies when it matches the protocol, has `acc >= min_acc` (default 97), and isn't bailed out. `best` is the best qualifying `wpm`. A skill with a target is `passed` once `sustain_runs` qualifying runs at or above target fall within `sustain_days`. Knowledge nodes (FSRS over `review.logged`) come in a later phase.
