@@ -884,9 +884,15 @@ Item {
         font.pixelSize: L.num(root.p.fontSize, 14) * root.dp
         font.family: root.family("sans")
         clip: true
-        text: root.p.text === undefined || root.p.text === null || root.p.text === "…" ? "" : String(root.p.text)
+        // Not bound to p.text: every render hands over a new p, and a binding would write
+        // its value back over what is being typed (and a state set from onChange comes
+        // back without a trailing space, so a second word could never be typed). The
+        // field takes the widget's text only when it differs, ignoring trailing space.
+        readonly property string want: root.p.text === undefined || root.p.text === null || root.p.text === "…" ? "" : String(root.p.text)
+        function sync() { if (field.text.replace(/\s+$/, "") !== field.want.replace(/\s+$/, "")) field.text = field.want }
+        onWantChanged: field.sync()
         onTextEdited: if (root.handlers.onChange) root.handlers.onChange(field.text)
-        Component.onCompleted: if (root.p.focus === true) forceActiveFocus()
+        Component.onCompleted: { field.sync(); if (root.p.focus === true) forceActiveFocus() }
         onAccepted: {
           if (root.handlers.onSubmit) root.handlers.onSubmit(field.text)
           if (root.p.clear === true) field.text = ""
@@ -922,6 +928,8 @@ Item {
         return it === root ? null : it
       }
       readonly property bool shown: root.visible && !!popup.windowItem
+      onShownChanged: if (root.widget) root.widget.popupsOpen += popup.shown ? 1 : -1
+      Component.onDestruction: if (popup.shown && root.widget) root.widget.popupsOpen -= 1
       readonly property bool framed: !!root.p.background || L.num(root.p.border, 0) > 0
       function dismiss() { if (root.handlers.onDismiss) root.handlers.onDismiss() }
 

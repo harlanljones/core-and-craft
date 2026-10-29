@@ -105,7 +105,8 @@ Item {
   // Esc closes the map, as it closes any Omarchy panel.
   Shortcut {
     sequence: "Escape"
-    enabled: board.screenNode !== null
+    // Off while a popup is up: its own Esc closes it first.
+    enabled: board.screenNode !== null && (!board.screenOwner() || board.screenOwner().popupsOpen === 0)
     onActivated: { var w = board.screenOwner(); if (w) w.closeScreen() }
   }
 
