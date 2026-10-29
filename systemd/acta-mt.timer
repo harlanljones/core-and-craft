@@ -1,5 +1,5 @@
 [Unit]
-Description=LifeQuest: archive Monkeytype results daily
+Description=CORE & CRAFT: archive Monkeytype results daily
 
 [Timer]
 OnCalendar=*-*-* 23:30

@@ -1,0 +1,16 @@
+[Unit]
+Description=CORE & CRAFT: archive Monkeytype results
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# MONKEYTYPE_APE_KEY=... in a 0600 file. Or drop this line and use
+# LoadCredentialEncrypted=monkeytype:%h/.config/core-and-craft/monkeytype.cred
+EnvironmentFile=%h/.config/core-and-craft/monkeytype.env
+Environment=ACTA_DATA=%h/core-and-craft ACTA_STATE=%h/.local/state/core-and-craft
+# Installed binary, never `go run`: mise's Go is not on the unit's PATH.
+ExecStart=%h/.local/bin/acta mt pull
+ExecStartPost=%h/.local/bin/acta snapshot
+NoNewPrivileges=yes
+PrivateTmp=yes

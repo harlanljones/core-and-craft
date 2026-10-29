@@ -1,7 +1,0 @@
-[Unit]
-Description=LifeQuest: rebuild snapshot.json
-
-[Service]
-Type=oneshot
-Environment=LQ_DATA=%h/life LQ_STATE=%h/.local/state/lifequest
-ExecStart=%h/.local/bin/lq snapshot

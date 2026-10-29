@@ -1,0 +1,8 @@
+[Unit]
+Description=CORE & CRAFT: rebuild the snapshot when the log changes
+
+[Path]
+PathChanged=%h/core-and-craft/events.jsonl
+
+[Install]
+WantedBy=default.target

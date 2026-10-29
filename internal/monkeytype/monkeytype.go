@@ -190,7 +190,7 @@ func ToEvent(m map[string]any, loc *time.Location, now time.Time) (event.Event, 
 		Pillar:      "competence",
 		Kind:        "typing.test",
 		Subject:     "skill:typing",
-		Source:      event.Source{Via: "monkeytype-api", Agent: "lq-mt", Ref: id},
+		Source:      event.Source{Via: "monkeytype-api", Agent: "acta-mt", Ref: id},
 		Data:        raw,
 	}, nil
 }

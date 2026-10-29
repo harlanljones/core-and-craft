@@ -1,5 +1,5 @@
 // Package snapshot folds the event log into snapshot.json, the one file
-// the LifeQuest widgets read. Progress is arithmetic over effective events;
+// the CORE & CRAFT widgets read. Progress is arithmetic over effective events;
 // nothing here is self-reported.
 package snapshot
 

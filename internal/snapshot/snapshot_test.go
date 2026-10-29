@@ -25,7 +25,7 @@ func (b *builder) add(kind, at string, data string) string {
 	b.evs = append(b.evs, event.Event{
 		ID: id, V: 1, At: at, AtPrecision: prec, Seq: int64(len(b.evs) + 1),
 		RecordedAt: "2026-10-29T17:45:00Z", Pillar: "competence", Kind: kind,
-		Subject: subject, Source: event.Source{Via: "chat", Agent: "lq"},
+		Subject: subject, Source: event.Source{Via: "chat", Agent: "acta"},
 		Data: json.RawMessage(data),
 	})
 	return id
@@ -35,7 +35,7 @@ func (b *builder) retract(target string) {
 	b.evs = append(b.evs, event.Event{
 		ID: fmt.Sprintf("evt_%016x", len(b.evs)+1), V: 1, At: "2026-10-29", AtPrecision: event.PrecisionDay,
 		Seq: int64(len(b.evs) + 1), RecordedAt: "2026-10-29T18:00:00Z", Pillar: "competence",
-		Kind: "event.retracted", Subject: target, Source: event.Source{Via: "manual", Agent: "lq"},
+		Kind: "event.retracted", Subject: target, Source: event.Source{Via: "manual", Agent: "acta"},
 		Data: json.RawMessage(`{"reason":"test"}`),
 	})
 }
@@ -141,13 +141,13 @@ func TestDailySeriesAndPillars(t *testing.T) {
 	}
 }
 
-// mt adds an imported Monkeytype run, as lq mt pull writes it.
+// mt adds an imported Monkeytype run, as acta mt pull writes it.
 func (b *builder) mt(at string, data string) {
 	n := len(b.evs) + 1
 	b.evs = append(b.evs, event.Event{
 		ID: fmt.Sprintf("mt:r%04d", n), V: 1, At: at, AtPrecision: event.PrecisionSecond, Seq: int64(n),
 		RecordedAt: "2026-10-29T23:30:00Z", Pillar: "competence", Kind: "typing.test",
-		Subject: "skill:typing", Source: event.Source{Via: "monkeytype-api", Agent: "lq-mt"},
+		Subject: "skill:typing", Source: event.Source{Via: "monkeytype-api", Agent: "acta-mt"},
 		Data: json.RawMessage(data),
 	})
 }
