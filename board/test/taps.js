@@ -184,7 +184,7 @@ const open2 = open(Object.assign({}, snap, { streak: { days: 3, today: false } }
   // "rest day ›" above the bridge
   const oi = spot.outlook[0] * G, ai = spot.agents[0] * G, oj = spot.outlook[1] * G
   const [mx, my] = at((oi + 1.1 + ai) / 2, oj + 0.5)
-  find(open2.screen().children, n => n.kind === 'Canvas')[0].h.onTap((mx - 8) * scale, (my - 23) * scale)
+  find(open2.screen().children, n => n.kind === 'Canvas')[0].h.onTap((mx - 78) * scale, (my + 15) * scale)
   ok(JSON.stringify(open2.take()) === JSON.stringify([['run', 'acta rest --via board']]), 'rest day command (map)')
 }
 
