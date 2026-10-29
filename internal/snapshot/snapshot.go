@@ -176,8 +176,47 @@ func round1(f float64) *float64 {
 }
 
 // Build folds evs (already validated) into a snapshot at now in loc.
+// dropMirrored removes hand-logged typing.test events (from a chat or a
+// screenshot) that an archived Monkeytype result already covers: same
+// subject, same local day, same whole wpm and acc. Screenshots show whole
+// numbers, so the comparison rounds. Each API result covers one hand-logged
+// run at most.
+func dropMirrored(evs []event.Event, loc *time.Location) []event.Event {
+	key := func(e event.Event) (string, bool) {
+		m := decode(e.Data)
+		wpm, ok1 := num(m["wpm"])
+		acc, ok2 := num(m["acc"])
+		if !ok1 || !ok2 {
+			return "", false
+		}
+		return fmt.Sprintf("%s|%s|%.0f|%.0f", e.Subject, e.LocalDate(loc), math.Round(wpm), math.Round(acc)), true
+	}
+	api := map[string]int{}
+	for _, e := range evs {
+		if e.Kind == "typing.test" && e.Source.Via == "monkeytype-api" {
+			if k, ok := key(e); ok {
+				api[k]++
+			}
+		}
+	}
+	if len(api) == 0 {
+		return evs
+	}
+	out := evs[:0:0]
+	for _, e := range evs {
+		if e.Kind == "typing.test" && e.Source.Via != "monkeytype-api" {
+			if k, ok := key(e); ok && api[k] > 0 {
+				api[k]--
+				continue
+			}
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
 func Build(evs []event.Event, bad []store.LineError, src Source, now time.Time, loc *time.Location) Snapshot {
-	live := Effective(evs)
+	live := dropMirrored(Effective(evs), loc)
 	sort.SliceStable(live, func(i, j int) bool { return live[i].Seq < live[j].Seq })
 	today := now.In(loc).Format("2006-01-02")
 

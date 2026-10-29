@@ -140,3 +140,18 @@ func TestDailySeriesAndPillars(t *testing.T) {
 		t.Fatalf("pillars %+v", s.Pillars)
 	}
 }
+
+func TestChatRunMirroredByAPIRunCountsOnce(t *testing.T) {
+	b := base()
+	b.add("typing.test", "2026-10-29", runData(88, 97, ""))
+	b.add("typing.test", "2026-10-29", runData(88, 97, ""))
+	b.add("typing.test", "2026-10-29", runData(85, 97, ""))
+	api := b.add("typing.test", "2026-10-29T10:15:00-07:00", runData(88.4, 97.2, ""))
+	b.evs[len(b.evs)-1].Source = event.Source{Via: "monkeytype-api", Agent: "lq-mt", Ref: "r1"}
+	sk := typing(t, Build(b.evs, nil, Source{}, now, la))
+	// One 88/97 chat run is the API result; the other 88 and the 85 have no
+	// API twin and stay.
+	if sk.RunsTotal != 3 || sk.RunsQualifying != 3 || sk.BestEvent != api || *sk.Best != 88.4 {
+		t.Fatalf("got total %d qualifying %d best %v from %s", sk.RunsTotal, sk.RunsQualifying, *sk.Best, sk.BestEvent)
+	}
+}
