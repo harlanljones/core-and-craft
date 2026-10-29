@@ -32,7 +32,6 @@ func TestStreak(t *testing.T) {
 	l.add("note.added", "note:a", "manual", "2026-10-26", `{}`)
 	l.add("note.added", "note:b", "duet:faith", "2026-10-27", `{}`)
 	l.add("day.rested", "day:2026-10-28", "manual", "2026-10-28", `{}`)
-	l.add("typing.test", "skill:typing", "acta-mt", "2026-10-29T09:00:00-07:00", `{}`) // imports don't count
 	if s := streakOf(l.evs, todayLA, la); s != (Streak{Days: 3, Today: false}) {
 		t.Fatalf("through yesterday: %+v", s)
 	}
@@ -194,5 +193,28 @@ func TestPillarTodayAndLeveledToday(t *testing.T) {
 	l.add("note.added", "note:more", "manual", "2026-10-29", `{}`)
 	if s = Build(l.evs, nil, Source{}, now, la); len(s.LeveledToday) != 1 {
 		t.Fatalf("still the one level-up: %v", s.LeveledToday)
+	}
+}
+
+// A Monkeytype run pulled by acta-mt keeps the streak, and earns xp, like
+// any other event. Count-once still applies: a hand-logged copy of the same
+// run adds neither a day nor xp.
+func TestImportedRunKeepsStreakAndCountsOnce(t *testing.T) {
+	b := base()
+	b.add("typing.test", "2026-10-27", runData(80, 98, ""))
+	b.mt("2026-10-28T10:00:00-07:00", runData(85.4, 97.2, ""))
+	b.mt("2026-10-29T10:00:00-07:00", runData(87.6, 98.1, ""))
+	s := Build(b.evs, nil, Source{}, now, la)
+	if s.Streak != (Streak{Days: 3, Today: true}) {
+		t.Fatalf("an import-only day must keep the streak: %+v", s.Streak)
+	}
+	// Today's run was also logged from a screenshot: still one run, 5 xp, one day.
+	b.add("typing.test", "2026-10-29", runData(88, 98, ""))
+	s2 := Build(b.evs, nil, Source{}, now, la)
+	if s2.Streak != s.Streak || s2.XP.Total != s.XP.Total {
+		t.Fatalf("hand-logged copy counted twice: streak %+v xp %d, was streak %+v xp %d", s2.Streak, s2.XP.Total, s.Streak, s.XP.Total)
+	}
+	if s2.XP.Total != 15 {
+		t.Fatalf("want 3 runs x 5 xp, got %d", s2.XP.Total)
 	}
 }
