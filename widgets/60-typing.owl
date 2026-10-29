@@ -4,14 +4,16 @@ widget "typing" {
   size: 3x2
   minSize: 3x2
 
-  meta { owl: 10; description: "Typing (competence): best qualifying wpm, the target, today's runs and the last 30 days"; version: "0.1"; license: "MIT"; category: "productivity" }
+  meta { owl: 10; description: "Typing (competence): best qualifying wpm, the target, today's runs and the last 14 days"; version: "0.1"; license: "MIT"; category: "productivity" }
 
   // The widget contract (docs/widget-contract.md): read snapshot.json, never
   // events.jsonl. acta snapshot replaces it atomically, so it is always whole.
   source s = file("~/.local/state/core-and-craft/snapshot.json") json
 
   let sk = (s.skills ?? []).filter(k => k.id == "skill:typing").first()
-  let daily = sk.daily ?? []
+  // The tile is 3x2: 14 characters fit its width (30 clipped), so the strip
+  // shows the last two weeks of the 30 days the snapshot carries.
+  let daily = (sk.daily ?? []).drop(max(0, len(sk.daily ?? []) - 14))
   let bests = daily.filter(d => d.best != null).map(d => d.best)
   let lo = len(bests) > 0 ? min(bests) : 0
   let hi = len(bests) > 0 ? max(bests) : 0
