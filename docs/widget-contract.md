@@ -77,7 +77,7 @@ Widgets never read `events.jsonl`. They read `$ACTA_STATE/snapshot.json` (defaul
 - **Levels**: level *n* costs round(100 × 1.5^(n−1)) xp (100, 150, 225, 338, …), overall and per pillar.
 - **`pillars[].today`** counts the events dated today in that pillar (`today.events` is their sum). The town lights one window per event and colors the day's floor tiles with it.
 - **`leveled_today`** names the pillars whose level today's xp raised, in framework order, `[]` when none. The town puts a ✦ on their signs.
-- **`streak`** counts consecutive days with any event that isn't an import, or a `day.rested`. Today joins once it has one; until then the streak runs through yesterday.
+- **`streak`** counts consecutive days with any event, or a `day.rested`. A Monkeytype run pulled by `acta-mt` counts, as it earns xp; a run logged by hand and repeated by an import is one run, so it adds neither a streak day nor xp twice. Today joins once it has one; until then the streak runs through yesterday.
 
 ### Display rules
 
@@ -91,7 +91,7 @@ Widgets never read `events.jsonl`. They read `$ACTA_STATE/snapshot.json` (defaul
 
 ## Tiles
 
-`widgets/60-typing.owl` (3x2) reads `file("~/.local/state/core-and-craft/snapshot.json") json`. It shows the best qualifying wpm with the target, `runs_qualifying/runs_total`, today's best and count, a progress bar when a target is set, and a 30-character strip of `daily`, one character per day. `make check-widgets` renders every tile against the seed, the seed plus a target, and a missing snapshot.
+`widgets/60-typing.owl` (3x2) reads `file("~/.local/state/core-and-craft/snapshot.json") json`. It shows the best qualifying wpm with the target, `runs_qualifying/runs_total`, today's best and count, a progress bar when a target is set, and a 14-character strip of the last 14 `daily` entries, one character per day (30 clipped the tile). `make check-widgets` renders every tile against the seed, the seed plus a target, and a missing snapshot.
 
 A tile reads the default path. A board running with `ACTA_STATE` set elsewhere has to edit the tile's path.
 
