@@ -1,0 +1,10 @@
+[Unit]
+Description=LifeQuest: archive Monkeytype results daily
+
+[Timer]
+OnCalendar=*-*-* 23:30
+RandomizedDelaySec=15m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
