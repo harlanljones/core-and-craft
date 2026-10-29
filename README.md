@@ -23,6 +23,12 @@ lq mt pull --all                             # one-time backfill
 make install-units                           # daily 23:30 pull + rebuild on change
 ```
 
+Board (Omarchy 4):
+
+```sh
+make check-widgets install-board   # plugin harlan.core-and-craft + ~/.config/core-and-craft/widgets/
+```
+
 Create the ApeKey in Monkeytype's account settings and enable it. The key is read from the env file or a systemd credential named `monkeytype`; it is never put in a URL, a log line or an error.
 
 ## Commands
@@ -49,6 +55,9 @@ internal/store/       flock append, scanning
 internal/monkeytype/  ApeKey client and result mapping
 internal/snapshot/    fold into snapshot.json (gate, sustain, daily series, pillars)
 systemd/              user units: daily pull, rebuild on change
+board/plugin/         Omarchy 4 shell plugin: the board, vendored OWL runtime (owl/)
+board/test/           check.sh renders every widget under node against lq-built snapshots
+widgets/              OWL tiles the board shows (60-typing.owl)
 docs/                 event envelope, widget contract
 seed/                 Oct 29 events and the first study note, as an inbox file
 ```
@@ -56,6 +65,6 @@ seed/                 Oct 29 events and the first study note, as an inbox file
 ## Roadmap
 
 1. Day one (this): archiver, ingest, snapshot, status.
-2. Port the Omarchy board plugin from `~/dev/omarchy-widgets`; add the typing tile.
+2. Board plugin ported from `~/dev/omarchy-widgets` (runtime only; the old quest widgets and bash `lq` stay there), typing tile.
 3. Week one: `lq build` into SQLite (modernc.org/sqlite), pillar strip widget, bar pill.
 4. FSRS reviews over knowledge notes (go-fsrs), then the knowledge graph.

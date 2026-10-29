@@ -2,5 +2,6 @@
 *.db
 *.db-*
 snapshot.json
+/board/test/out/
 .env
 *.env
