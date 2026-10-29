@@ -1,0 +1,8 @@
+[Unit]
+Description=LifeQuest: rebuild the snapshot when the log changes
+
+[Path]
+PathChanged=%h/life/events.jsonl
+
+[Install]
+WantedBy=default.target
