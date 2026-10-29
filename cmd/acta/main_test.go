@@ -343,6 +343,12 @@ func TestQuestLifecycle(t *testing.T) {
 		t.Fatal("unknown quest should fail")
 	}
 
+	nope := questID(t, runOut(t, e, "quest", "add", "--pillar", "economic", "--title", "Call Mom", "--agent", "duet:economic"))
+	mustRun(t, e, "quest", "decline", nope)
+	if q := listQuests(t, e)[nope]; q.Status != "declined" {
+		t.Fatalf("after decline: %+v", q)
+	}
+
 	// The default list hides dropped and declined quests.
 	out := runOut(t, e, "quest", "list")
 	if strings.Contains(out, "Call Mom") || !strings.Contains(out, "Typing drill") {
