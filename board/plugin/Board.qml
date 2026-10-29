@@ -34,7 +34,7 @@ Item {
 
   readonly property real dp: pitch / 69
   implicitWidth: columns * pitch - gap
-  implicitHeight: Math.max(rowsUsed, board.screenNode ? board.screenRows : 0) * pitch - gap
+  implicitHeight: Math.max(rowsUsed, board.screenHeld ? board.screenRows : 0) * pitch - gap
 
   FolderListModel {
     id: files
@@ -85,6 +85,30 @@ Item {
     }
     return null
   }
+  // The screen stays up for its fade-out: the last owner and node are kept
+  // for the 200 ms the layer takes to go.
+  property bool screenHeld: false
+  property var heldOwner: null
+  property var heldNode: null
+  function layerOwner() { return board.screenOwner() || board.heldOwner }
+  onScreenNodeChanged: {
+    if (board.screenNode) {
+      board.heldNode = board.screenNode
+      board.heldOwner = board.screenOwner()
+      board.screenHeld = true
+      holdTimer.stop()
+    } else {
+      holdTimer.restart()
+    }
+  }
+  Timer { id: holdTimer; interval: 220; onTriggered: board.screenHeld = false }
+  // Esc closes the map, as it closes any Omarchy panel.
+  Shortcut {
+    sequence: "Escape"
+    enabled: board.screenNode !== null
+    onActivated: { var w = board.screenOwner(); if (w) w.closeScreen() }
+  }
+
   readonly property var screenNode: {
     var w = board.screenOwner()
     if (!w || !w.screenOpen || !w.screenTree) return null
@@ -115,8 +139,10 @@ Item {
       height: tile.place.h * board.pitch - board.gap
       color: widget.alpha(widget.ink("background"), board.tileOpacity)
       clip: true
-      // The other tiles don't show while a screen is open.
-      visible: board.screenNode === null
+      // The other tiles don't show while a screen is open: they fade out and back.
+      opacity: board.screenNode === null ? 1 : 0
+      visible: opacity > 0
+      Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
 
       Connections {
         target: widget
@@ -140,8 +166,16 @@ Item {
       }
 
       TapHandler {
+        id: tileTap
         enabled: !!(widget.tree && widget.tree.onTap)
         onTapped: (p) => widget.tree.onTap(p.position.x / widget.dp, p.position.y / widget.dp)
+      }
+      // A tile that opens something answers the pointer like Omarchy's own: a
+      // pointing hand, a wash on hover, a deeper one while pressed.
+      HoverHandler {
+        id: tileHover
+        enabled: tileTap.enabled
+        cursorShape: Qt.PointingHandCursor
       }
 
       Owl.OwlNode {
@@ -164,12 +198,22 @@ Item {
         wrapMode: Text.Wrap
       }
 
-      // Omalauncher's frame: square, 2 dp, the theme's muted color.
+      Rectangle {
+        anchors.fill: parent
+        color: widget.ink("foreground")
+        visible: opacity > 0
+        opacity: !tileTap.enabled ? 0 : tileTap.pressed ? 0.12 : tileHover.hovered ? 0.05 : 0
+        Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+      }
+
+      // Omalauncher's frame: square, 2 dp, the theme's muted color. It brightens
+      // to the accent while the pointer is over a tile that takes a tap.
       Rectangle {
         anchors.fill: parent
         color: "transparent"
         border.width: Math.max(1, 2 * widget.dp)
-        border.color: widget.ink("muted")
+        border.color: tileTap.enabled && tileHover.hovered ? widget.ink("accent") : widget.ink("muted")
+        Behavior on border.color { ColorAnimation { duration: 120 } }
       }
     }
   }
@@ -177,29 +221,42 @@ Item {
   Loader {
     anchors.fill: parent
     z: 2
-    active: board.screenNode != null
+    active: board.screenHeld
     sourceComponent: screenLayer
   }
 
   Component {
     id: screenLayer
     Rectangle {
+      id: layer
+      // Opens with a 160 ms fade and a small settle from 97.5%; closes by the reverse.
+      property bool open: false
+      Component.onCompleted: open = Qt.binding(function() { return board.screenNode !== null })
+      opacity: layer.open ? 1 : 0
+      scale: layer.open ? 1 : 0.975
+      Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+      Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
       color: {
-        var w = board.screenOwner()
+        var w = board.layerOwner()
         return w ? w.alpha(w.ink("background"), 0.96) : "transparent"
+      }
+      // A right click goes back, as in any Omarchy panel; the X and Esc do too.
+      TapHandler {
+        acceptedButtons: Qt.RightButton
+        onTapped: { var w = board.screenOwner(); if (w) w.closeScreen() }
       }
       Owl.OwlNode {
         anchors.fill: parent
         anchors.margins: 12 * board.dp
-        widget: board.screenOwner()
-        node: board.screenNode
+        widget: board.layerOwner()
+        node: board.screenNode || board.heldNode
       }
       Rectangle {
         anchors.fill: parent
         color: "transparent"
         border.width: Math.max(1, 2 * board.dp)
         border.color: {
-          var w = board.screenOwner()
+          var w = board.layerOwner()
           return w ? w.ink("muted") : "transparent"
         }
       }
