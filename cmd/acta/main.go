@@ -9,6 +9,9 @@
 //	acta snapshot               rebuild snapshot.json from the log
 //	acta status [--json]        one line for a bar widget
 //	acta doctor                 check the log's invariants
+//	acta quest <command>        add, finish, undo, accept, decline, drop, snooze, edit, list
+//	acta checkin ask|answer     a pillar question and its answer
+//	acta rest [--at D]          a rest day: keeps the streak
 package main
 
 import (
@@ -84,7 +87,8 @@ func main() {
 }
 
 const usage = `usage: acta <command>
-  init | mt pull [--all] | log <kind> | retract <id> | ingest [file...] | snapshot | status [--json] | doctor | version`
+  init | mt pull [--all] | log <kind> | retract <id> | ingest [file...] | snapshot | status [--json] | doctor | version
+  quest add|done|undo|accept|decline|drop|snooze|edit|list | checkin ask|answer | rest`
 
 func run(e env, args []string) int {
 	if len(args) == 0 {
@@ -105,6 +109,12 @@ func run(e env, args []string) int {
 		err = cmdLog(e, args[1:])
 	case "retract":
 		err = cmdRetract(e, args[1:])
+	case "quest":
+		err = cmdQuest(e, args[1:])
+	case "checkin":
+		err = cmdCheckin(e, args[1:])
+	case "rest":
+		err = cmdRest(e, args[1:])
 	case "ingest":
 		err = cmdIngest(e, args[1:])
 	case "snapshot":
