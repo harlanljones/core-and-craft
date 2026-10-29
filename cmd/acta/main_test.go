@@ -98,18 +98,102 @@ func TestSeedIngestSnapshotStatus(t *testing.T) {
 	}
 }
 
-func TestIngestRejectsBadFileAndLeavesIt(t *testing.T) {
+// goodLine returns the first event line of the seed file.
+func goodLine(t *testing.T) string {
+	t.Helper()
+	seed, _ := filepath.Glob("../../seed/*.jsonl")
+	if len(seed) != 1 {
+		t.Fatalf("want one seed file, got %v", seed)
+	}
+	b, err := os.ReadFile(seed[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.SplitN(string(b), "\n", 2)[0]
+}
+
+func TestIngestQuarantinesBadFile(t *testing.T) {
+	e, out, errb := testEnv(t, nil)
+	mustRun(t, e, "init")
+	body := goodLine(t) + "\n" + `{"v":1,"kind":` + "\n"
+	bad := filepath.Join(e.inboxDir(), "bad.jsonl")
+	os.WriteFile(bad, []byte(body), 0o644)
+	if code := run(e, []string{"ingest"}); code == 0 {
+		t.Fatal("want failure")
+	}
+	if _, err := os.Stat(bad); !os.IsNotExist(err) {
+		t.Fatal("rejected file must leave the inbox")
+	}
+	moved := filepath.Join(e.rejectedDir(), "bad.jsonl")
+	got, err := os.ReadFile(moved)
+	if err != nil || string(got) != body {
+		t.Fatalf("rejected copy %q, %v", got, err)
+	}
+	reason, err := os.ReadFile(moved + ".err")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(reason), "bad.jsonl rejected") || !strings.Contains(string(reason), "line 2:") {
+		t.Fatalf(".err %q", reason)
+	}
+	if strings.Contains(string(reason), "line 1:") {
+		t.Fatalf(".err blames the good line: %q", reason)
+	}
+	if !strings.Contains(errb.String(), "bad.jsonl rejected") || !strings.Contains(errb.String(), "line 2:") {
+		t.Fatalf("stderr %q", errb.String())
+	}
+	if !strings.Contains(out.String(), "ingest: 0 file(s), 0 new") {
+		t.Fatalf("stdout %q", out.String())
+	}
+	// The next run must not see the quarantined file.
+	out.Reset()
+	errb.Reset()
+	mustRun(t, e, "ingest")
+	if !strings.Contains(out.String(), "ingest: 0 file(s), 0 new, 0 already logged") {
+		t.Fatalf("second ingest %q", out.String())
+	}
+	if _, err := os.Stat(moved); err != nil {
+		t.Fatal("quarantined file must stay in rejected/")
+	}
+}
+
+func TestIngestQuarantineNameCollision(t *testing.T) {
+	e, _, _ := testEnv(t, nil)
+	mustRun(t, e, "init")
+	bodies := []string{`{"first":` + "\n", `{"second":` + "\n", `{"third":` + "\n"}
+	for _, b := range bodies {
+		os.WriteFile(filepath.Join(e.inboxDir(), "bad.jsonl"), []byte(b), 0o644)
+		if code := run(e, []string{"ingest"}); code == 0 {
+			t.Fatal("want failure")
+		}
+	}
+	for i, name := range []string{"bad.jsonl", "bad-1.jsonl", "bad-2.jsonl"} {
+		p := filepath.Join(e.rejectedDir(), name)
+		got, err := os.ReadFile(p)
+		if err != nil || string(got) != bodies[i] {
+			t.Fatalf("%s = %q, %v; want %q", name, got, err, bodies[i])
+		}
+		if _, err := os.Stat(p + ".err"); err != nil {
+			t.Fatalf("%s.err: %v", name, err)
+		}
+	}
+}
+
+func TestIngestKeepLeavesRejectedFile(t *testing.T) {
 	e, _, errb := testEnv(t, nil)
 	mustRun(t, e, "init")
 	bad := filepath.Join(e.inboxDir(), "bad.jsonl")
 	os.WriteFile(bad, []byte(`{"v":1,"kind":"quest.tapped"}`+"\n"), 0o644)
-	if code := run(e, []string{"ingest"}); code == 0 {
+	if code := run(e, []string{"ingest", "--keep"}); code == 0 {
 		t.Fatal("want failure")
 	}
 	if _, err := os.Stat(bad); err != nil {
-		t.Fatal("rejected file must stay in the inbox")
+		t.Fatal("--keep must leave the rejected file in the inbox")
 	}
-	if !strings.Contains(errb.String(), "bad.jsonl rejected") {
+	if _, err := os.Stat(e.rejectedDir()); !os.IsNotExist(err) {
+		t.Fatal("--keep must not create or fill rejected/")
+	}
+	if !strings.Contains(errb.String(), "bad.jsonl rejected") || !strings.Contains(errb.String(), "left in place") {
 		t.Fatalf("stderr %q", errb.String())
 	}
 }

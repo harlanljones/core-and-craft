@@ -61,7 +61,7 @@ Append `event.retracted` (`acta retract <id>`) or a new event with `supersedes`.
 
 ## Remote writers: the inbox
 
-Cloud agents (Claude Duet channels) can't take the lock. They write whole files to `$ACTA_DATA/inbox/<recorded_at>-<agent>.jsonl`: one event per line, `seq` omitted, `id` optional (computed if missing). `acta ingest` validates each file; any bad line rejects the whole file and leaves it in place. Good files are appended (dedupe by id) and removed.
+Cloud agents (Claude Duet channels) can't take the lock. They write whole files to `$ACTA_DATA/inbox/<recorded_at>-<agent>.jsonl`: one event per line, `seq` omitted, `id` optional (computed if missing). `acta ingest` validates each file; any bad line rejects the whole file. A rejected file moves to `$ACTA_DATA/inbox/rejected/<name>`, with `<name>.err` next to it holding the file name and each `line N: ...` error; if that name is taken, acta adds a suffix (`<base>-1.jsonl`, `<base>-2.jsonl`, ...) and never overwrites or deletes. The `*.jsonl` glob does not enter `rejected/`, so a rejected file is not retried. To retry, fix the file and move it back to `inbox/`. With `--keep`, acta moves nothing. Good files are appended (dedupe by id) and removed.
 
 ### Duet route: Drive to inbox
 
@@ -70,7 +70,7 @@ Duet channels run in the cloud and save finished files to the Google Drive folde
 1. `rclone move ccinbox: ~/core-and-craft/inbox/ --include "*.jsonl" --drive-skip-gdocs` moves the files and deletes them from Drive. rclone writes `<name>.<rand>.partial` and renames it when the copy is whole. `acta ingest` globs only `*.jsonl`, so it never reads a partial file.
 2. `acta ingest` validates and appends them, as above.
 
-One-time setup: `rclone config create ccinbox drive scope=drive root_folder_id=<folder id>` and sign in with the folder owner's Google account. The token stays in `~/.config/rclone/rclone.conf`. A file that fails validation stays in the inbox and fails the unit; read the reason with `journalctl --user -u acta-inbox`.
+One-time setup: `rclone config create ccinbox drive scope=drive root_folder_id=<folder id>` and sign in with the folder owner's Google account. The token stays in `~/.config/rclone/rclone.conf`. A file that fails validation moves to `inbox/rejected/` with a `.err` file and fails that run of the unit; read the reason in the `.err` file or with `journalctl --user -u acta-inbox`.
 
 ## Mastery (day one: performance skills)
 
