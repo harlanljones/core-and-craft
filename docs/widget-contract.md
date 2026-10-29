@@ -42,7 +42,8 @@ Widgets never read `events.jsonl`. They read `$ACTA_STATE/snapshot.json` (defaul
   "xp": {"total": 610, "level": 4, "into": 135, "need": 338},
   "streak": {"days": 4, "today": true},
   "history": [0, 15, "... 30 days of xp, oldest first, ending today"],
-  "pillars": [{"pillar": "career", "events_7d": 3, "xp": 40, "level": 1, "into": 40, "need": 100}, "..."]
+  "pillars": [{"pillar": "career", "events_7d": 3, "today": 1, "xp": 40, "level": 1, "into": 40, "need": 100}, "..."],
+  "leveled_today": ["competence"]
 }
 ```
 
@@ -74,6 +75,8 @@ Widgets never read `events.jsonl`. They read `$ACTA_STATE/snapshot.json` (defaul
   | rest day | 0 |
 
 - **Levels**: level *n* costs round(100 × 1.5^(n−1)) xp (100, 150, 225, 338, …), overall and per pillar.
+- **`pillars[].today`** counts the events dated today in that pillar (`today.events` is their sum). The town lights one window per event and colors the day's floor tiles with it.
+- **`leveled_today`** names the pillars whose level today's xp raised, in framework order, `[]` when none. The town puts a ✦ on their signs.
 - **`streak`** counts consecutive days with any event, or a `day.rested`. A Monkeytype run pulled by `acta-mt` counts, as it earns xp; a run logged by hand and repeated by an import is one run, so it adds neither a streak day nor xp twice. Today joins once it has one; until then the streak runs through yesterday.
 
 ### Display rules
@@ -91,3 +94,10 @@ Widgets never read `events.jsonl`. They read `$ACTA_STATE/snapshot.json` (defaul
 `widgets/60-typing.owl` (3x2) reads `file("~/.local/state/core-and-craft/snapshot.json") json`. It shows the best qualifying wpm with the target, `runs_qualifying/runs_total`, today's best and count, a progress bar when a target is set, and a 14-character strip of the last 14 `daily` entries, one character per day (30 clipped the tile). `make check-widgets` renders every tile against the seed, the seed plus a target, and a missing snapshot.
 
 A tile reads the default path. A board running with `ACTA_STATE` set elsewhere has to edit the tile's path.
+
+`widgets/10-town.owl` (6x3) is Duae Insulae, the town. It reads the same snapshot plus `source now = clock` (day, dusk or night on the map). The tile opens `screen { }`: one Canvas with the two islands, over a rail with today's route, level, streak and check-ins. Spec: `docs/mockups/duae-insulae/spec.md`.
+
+- **Map:** every shape is built once in `let`s, in px at the brief's grid (582 x 470) and in isometric lot space, and the Canvas only walks the list, scaled by `width / 582`. Lots are drawn back to front and every label after the towers. It stays under the 2,000 drawing calls a frame OWL allows (about 480 on a busy day, 660 at night in a storm).
+- **Taps:** each lands on a lot, a boat, a `?` bubble or "rest day ›", or on the rail. A lot opens the pillar Popup, a boat or "review" the proposal Popup, a `?` or "? N waiting" the check-in Popup. Every write is `run("acta ... --via board")` with ids and text through `sh()`; `acta` has to be on the board's `PATH`. `board/test/taps.js` runs each tap against the command the spec gives it.
+- **Input:** "add a quest  #Pillar" takes a pillar name or any unique start of one (`#eco`). Without a tag, or with one that fits two pillars (`#re`), nothing runs and the rail says why. The Input's font is the shell's own; OWL doesn't let a widget set it.
+- **Board.qml** grows a board with fewer than 8 rows to 8 while a screen is open, and hides the other tiles. The rail's list scrolls when the board is shorter than the brief's.

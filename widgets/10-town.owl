@@ -1,0 +1,466 @@
+widget "town" {
+  page: 1
+  order: 1
+  size: 6x3
+  minSize: 6x3
+
+  meta { owl: 10; description: "Duae Insulae (two islands): the nine pillars as isometric towers, today's route, level, streak and check-ins; tap for the full map"; version: "0.1"; license: "MIT"; category: "productivity" }
+
+  // The widget contract (docs/widget-contract.md): read snapshot.json, never
+  // events.jsonl. The clock only decides day, dusk or night on the map.
+  source s = file("~/.local/state/core-and-craft/snapshot.json") json
+  source now = clock
+
+  // Which popup is open: "lot:<pillar>", "prop:<id>", "ask:<id>" or "menu:<id>".
+  state pop = ""
+  state draft = ""
+  // What the Input is set to. The Input is not bound to `draft`: a text it is
+  // given back loses its trailing space, so typing a second word would not stick.
+  state seed = ""
+  state answer = ""
+  state hint = ""
+
+  // ---------------------------------------------------------------- names
+  // Pillars read as the spec writes them, grouped under C.O.R.E. and C.R.A.F.T.
+  let ids = ["career", "outlook", "relationships", "economic", "competence", "recovery", "agents", "faith", "time"]
+  let titles = {"career": "Career", "outlook": "Outlook", "relationships": "Relationships", "economic": "Economic", "competence": "Competence", "recovery": "Recovery", "agents": "Agents", "faith": "Faith", "time": "Time"}
+  // Level numerals for 1 to 99; Roman numerals are for levels only.
+  let romans = range(100).map(n => reduce([[90, "XC"], [50, "L"], [40, "XL"], [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]], (acc, p) => {"r": acc.r - floor(acc.r / p[0]) * p[0], "o": acc.o + join(range(floor(acc.r / p[0])).map(_ => p[1]), "")}, {"r": n, "o": ""}).o)
+
+  // ---------------------------------------------------------------- the day
+  let clk = now ?? 43200
+  let mins = int(fmtTime(clk, "H")) * 60 + int(fmtTime(clk, "m"))
+  let phase = mins >= 1140 || mins < 360 ? "night" : mins >= 1020 ? "dusk" : "day"
+  let qs = s.quests ?? []
+  let openq = qs.filter(q => q.done_today != true)
+  let doneq = qs.filter(q => q.done_today == true)
+  let shown = take(openq, 4)
+  let dueN = len(qs.filter(q => q.due == true))
+  let lateN = len(qs.filter(q => (q.overdue_days ?? 0) > 0))
+  // One overdue quest is a drizzle; two or more, a storm.
+  let wx = lateN >= 2 ? "storm" : lateN == 1 ? "drizzle" : "clear"
+  let props = s.proposed ?? []
+  let asks = (s.checkins ?? []).filter(c => c.open == true)
+  let top = len(shown) > 0 ? first(shown).pillar : ""
+  let stopOf = shown.map(q => q.pillar)
+  let streak = s.streak ?? {"days": 0, "today": false}
+  let xp = s.xp ?? {"level": 1, "into": 0, "need": 100, "total": 0}
+  let overall = get(romans, min(99, xp.level ?? 1))
+
+  // ---------------------------------------------------------------- geometry
+  // Drawn in px at the brief's grid (582 x 470); the Canvas scales it to the
+  // space it has. Isometric lots: TW 116, TH 58; a lot (i, j) sits at
+  // x = 166 + (i - j) * 58, y = 214 + (i + j) * 29. A point is [i, j, h] with
+  // h px above the ground, and an optional screen offset [.., dx, dy].
+  let spot = {"career": [0, 0], "outlook": [1, 0], "relationships": [0, 1], "economic": [1, 1], "competence": [2.6, -1], "recovery": [3.6, -1], "agents": [2.6, 0], "faith": [3.6, 0], "time": [3.1, 1]}
+  let mark = {"career": "mast", "outlook": "dome", "relationships": "pitch", "economic": "columns", "competence": "block", "recovery": "dome", "agents": "chimney", "faith": "pitch", "time": "clock"}
+  let pd = ids.map(id => find(s.pillars ?? [], q => q.pillar == id) ?? {"pillar": id})
+  let lots = pd.map(p => {
+    "id": p.pillar, "title": get(titles, p.pillar), "mark": get(mark, p.pillar),
+    "i": get(spot, p.pillar)[0] * 1.32, "j": get(spot, p.pillar)[1] * 1.32,
+    "level": p.level ?? 1, "today": p.today ?? 0, "w7": p.events_7d ?? 0,
+    "up": contains(s.leveled_today ?? [], p.pillar), "ask": any(asks, c => c.pillar == p.pillar)
+  })
+  // The tower sits on the back half of the lot: footprint (fi, fj) to (fe, fn).
+  let lots2 = lots.map(l => merge(l, {
+    "fi": l.i + 0.14, "fj": l.j + 0.1, "fe": l.i + 0.6, "fn": l.j + 0.56,
+    "ci": l.i + 0.37, "cj": l.j + 0.33, "hgt": 16 + min(7, l.level) * 14,
+    "storeys": max(1, min(7, l.level)), "week": max(0, l.w7 - l.today)
+  }))
+  let G = 1.32
+  let oi = get(spot, "outlook")[0] * G
+  let oj = get(spot, "outlook")[1] * G
+  let ai = get(spot, "agents")[0] * G
+  let aj = get(spot, "agents")[1] * G
+  // The bridge runs from Outlook's lot to Agents'.
+  let b0 = oi + 1.1
+  let b1 = ai - 0.12
+  let bmx = 166 + ((b0 + b1) / 2 - (oj + 0.5)) * 58
+  let bmy = 214 + ((b0 + b1) / 2 + (oj + 0.5)) * 29
+
+  // ---------------------------------------------------------------- the scene
+  // Every shape is a map: k (poly, line, circle, text), pts in lot space, and
+  // fill / stroke / w / r. The Canvas only walks the list.
+  let dashEdges = [[0.05, 0.05, 0.95, 0.05], [0.95, 0.05, 0.95, 0.95], [0.95, 0.95, 0.05, 0.95], [0.05, 0.95, 0.05, 0.05]]
+  let tower = lots2.map(l => flatten([
+    // Castra's frame: a dashed diamond
+    flatten(dashEdges.map(e => range(5).map(k => {"k": "line", "w": 1.2, "stroke": muted,
+      "pts": [[l.i + e[0] + (e[2] - e[0]) * (k / 5 + 0.03), l.j + e[1] + (e[3] - e[1]) * (k / 5 + 0.03), 0], [l.i + e[0] + (e[2] - e[0]) * (k / 5 + 0.13), l.j + e[1] + (e[3] - e[1]) * (k / 5 + 0.13), 0]]}))),
+    // the week: seven floor tiles, yellow for today, green for the 7 days before
+    range(7).map(k => {"k": "poly", "fill": k < l.today ? yellow : k < l.today + l.week ? alpha(green, 0.9) : alpha(muted, 0.8),
+      "pts": [[l.i + 0.66, l.j + 0.12 + k * 0.11, 0], [l.i + 0.75, l.j + 0.12 + k * 0.11, 0], [l.i + 0.75, l.j + 0.21 + k * 0.11, 0], [l.i + 0.66, l.j + 0.21 + k * 0.11, 0]]}),
+    // the tower: left face muted, right face muted at 0.55, top surface
+    [{"k": "poly", "fill": muted, "pts": [[l.fi, l.fn, 0], [l.fe, l.fn, 0], [l.fe, l.fn, l.hgt], [l.fi, l.fn, l.hgt]]},
+     {"k": "poly", "fill": alpha(muted, 0.55), "pts": [[l.fe, l.fn, 0], [l.fe, l.fj, 0], [l.fe, l.fj, l.hgt], [l.fe, l.fn, l.hgt]]},
+     {"k": "poly", "fill": surface, "stroke": muted, "w": 1, "pts": [[l.fi, l.fn, l.hgt], [l.fe, l.fn, l.hgt], [l.fe, l.fj, l.hgt], [l.fi, l.fj, l.hgt]]}],
+    // two windows a storey on the left face, one lit per event today
+    flatten(range(l.storeys).map(sx => range(2).map(w => {"k": "poly", "fill": sx * 2 + w < l.today ? yellow : alpha(background, 0.7),
+      "pts": [[l.fi + (l.fe - l.fi) * (w == 0 ? 0.3 : 0.7), l.fn, 9 + sx * 14, -3, -1.5], [l.fi + (l.fe - l.fi) * (w == 0 ? 0.3 : 0.7), l.fn, 9 + sx * 14, 3, 1.5],
+              [l.fi + (l.fe - l.fi) * (w == 0 ? 0.3 : 0.7), l.fn, 9 + sx * 14, 3, -5.5], [l.fi + (l.fe - l.fi) * (w == 0 ? 0.3 : 0.7), l.fn, 9 + sx * 14, -3, -8.5]]}))),
+    // a roof mark per pillar, set on the top face's centre (ci, cj, hgt)
+    l.mark == "pitch" ? [
+      {"k": "poly", "fill": muted, "pts": [[l.fi, l.fn, l.hgt], [l.fe, l.fn, l.hgt], [l.ci, l.cj, l.hgt, 0, -18]]},
+      {"k": "poly", "fill": alpha(muted, 0.55), "pts": [[l.fe, l.fn, l.hgt], [l.fe, l.fj, l.hgt], [l.ci, l.cj, l.hgt, 0, -18]]}]
+    : l.mark == "dome" ? [{"k": "poly", "fill": muted, "pts": range(16).map(a => [l.ci, l.cj, l.hgt, 13 * cos(a * pi / 8), -2 + 8 * sin(a * pi / 8)])}]
+    : l.mark == "mast" ? [{"k": "line", "stroke": muted, "w": 2, "pts": [[l.ci, l.cj, l.hgt], [l.ci, l.cj, l.hgt, 0, -18]]}]
+    : l.mark == "chimney" ? flatten([[{"k": "poly", "fill": muted, "pts": [[l.ci, l.cj, l.hgt, 4, -14], [l.ci, l.cj, l.hgt, 9, -14], [l.ci, l.cj, l.hgt, 9, -2], [l.ci, l.cj, l.hgt, 4, -2]]}],
+        l.today > 0 ? [{"k": "circle", "fill": alpha(muted, 0.5), "r": 3, "pts": [[l.ci, l.cj, l.hgt, 7, -20]]}] : []])
+    : l.mark == "clock" ? [{"k": "circle", "fill": surface, "stroke": muted, "w": 1.4, "r": 8, "pts": [[l.ci, l.cj, l.hgt, 0, -10]]},
+        {"k": "line", "stroke": muted, "w": 1.4, "pts": [[l.ci, l.cj, l.hgt, 0, -10], [l.ci, l.cj, l.hgt, 0, -15]]}]
+    : l.mark == "columns" ? [-8, 0, 8].map(d => {"k": "line", "stroke": muted, "w": 2, "pts": [[l.ci, l.cj, l.hgt, d, 2], [l.ci, l.cj, l.hgt, d, -8]]})
+    : [{"k": "poly", "fill": muted, "pts": [[l.ci, l.cj, l.hgt, -8, -4], [l.ci, l.cj, l.hgt, 8, -4], [l.ci, l.cj, l.hgt, 8, -12], [l.ci, l.cj, l.hgt, -8, -12]]}]
+  ]))
+  // lots are drawn back to front
+  let order = sortBy(lots2, l => l.i + l.j)
+  let towerOps = flatten(order.map(l => get(tower, indexOf(ids, l.id))))
+  let dots = lots2.filter(l => l.id == top).map(l => {"k": "circle", "fill": accent, "r": 5, "pts": [[l.i + 0.45, l.j + 0.8, 0]]})
+
+  // ---------------------------------------------------------------- world, in lot space (g 0: islands and bridge, 1: boats, 2: towers)
+  let G2 = 1.16
+  let isleOps = flatten([
+    ["career", "outlook", "relationships", "economic"],
+    ["competence", "recovery", "agents", "faith", "time"]
+  ].map(group => flatten([
+    // a cliff under each lot's two front edges...
+    flatten(group.map(id => [
+      {"g": 0, "k": "poly", "fill": alpha(muted, 0.9), "pts": [[get(spot, id)[0] * G - 0.16, get(spot, id)[1] * G + G2, 0], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G + G2, 0], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G + G2, -14], [get(spot, id)[0] * G - 0.16, get(spot, id)[1] * G + G2, -14]]},
+      {"g": 0, "k": "poly", "fill": alpha(muted, 0.55), "pts": [[get(spot, id)[0] * G + G2, get(spot, id)[1] * G + G2, 0], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G - 0.16, 0], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G - 0.16, -14], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G + G2, -14]]}])),
+    // ...then the grown diamonds
+    group.map(id => {"g": 0, "k": "poly", "fill": surface, "pts": [[get(spot, id)[0] * G - 0.16, get(spot, id)[1] * G - 0.16, 0], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G - 0.16, 0], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G + G2, 0], [get(spot, id)[0] * G - 0.16, get(spot, id)[1] * G + G2, 0]]})
+  ])))
+  // the bridge is yellow while today is kept, muted otherwise, with 5 planks
+  let bridgeOps = flatten([
+    [{"g": 0, "k": "poly", "fill": alpha(streak.today == true ? yellow : muted, 0.85), "pts": [[b0, oj + 0.38, 0], [b1, aj + 0.38, 0], [b1, aj + 0.62, 0], [b0, oj + 0.62, 0]]}],
+    range(1, 6).map(k => {"g": 0, "k": "line", "stroke": alpha(background, 0.6), "w": 1.2, "pts": [[b0 + (b1 - b0) * k / 6, oj + 0.38, 0], [b0 + (b1 - b0) * k / 6, oj + 0.62, 0]]})
+  ])
+  // a sailboat per proposal, moored off the front of its pillar's lot
+  let boatOps = flatten(range(len(props)).map(k => [
+    {"g": 1, "k": "poly", "fill": cyan, "pts": [[get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 7 + k * 30, 26], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 29 + k * 30, 26], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 25 + k * 30, 32], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 11 + k * 30, 32]]},
+    {"g": 1, "k": "poly", "fill": alpha(cyan, 0.8), "pts": [[get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 18 + k * 30, 11], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 27 + k * 30, 24], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 18 + k * 30, 24]]}]))
+  let world = flatten([isleOps, bridgeOps, boatOps, towerOps.map(d => merge(d, {"g": 2})), dots.map(d => merge(d, {"g": 2}))])
+  // the one place the isometric projection happens
+  let proj = world.map(d => merge(d, {"pts": d.pts.map(p => [166 + (p[0] - p[1]) * 58 + (p[3] ?? 0), 214 + (p[0] + p[1]) * 29 - p[2] + (p[4] ?? 0)])}))
+
+  // ---------------------------------------------------------------- sky, water, weather (in px, placed by hash so they hold still)
+  let night = phase == "night"
+  let sky = flatten([
+    night ? [{"k": "circle", "fill": alpha(yellow, 0.85), "r": 10, "pts": [[545, 30]]}, {"k": "circle", "fill": background, "r": 9, "pts": [[550, 27]]}]
+      : phase == "dusk" ? [{"k": "circle", "fill": alpha(yellow, 0.55), "r": 11, "pts": [[545, 54]]}]
+      : [{"k": "circle", "fill": alpha(yellow, 0.7), "r": 10, "pts": [[545, 30]]}],
+    phase == "day" ? [] : range(night ? 46 : 12).map(k => {"k": "circle", "fill": alpha(foreground, 0.2 + hash("sa", k) * 0.35), "r": 0.6 + hash("sr", k) * 0.8, "pts": [[hash("sx", k) * 582, hash("sy", k) * 110]]}),
+    range(60).map(k => {"k": "line", "stroke": alpha(blue, 0.3), "w": 1, "pts": [[hash("wx", k) * 582, 40 + hash("wy", k) * 420], [hash("wx", k) * 582 + 10, 40 + hash("wy", k) * 420]]})
+  ])
+  let rain = wx == "clear" ? [] : range(wx == "drizzle" ? 40 : 110).map(k => {"k": "line", "stroke": alpha(blue, 0.6), "w": 1.2, "pts": [[hash("rx", k) * 582, hash("ry", k) * 470], [hash("rx", k) * 582 - 4, hash("ry", k) * 470 + 9]]})
+
+  // ---------------------------------------------------------------- labels, after every tower so none is hidden
+  let lots3 = lots2.map(l => merge(l, {
+    "lv": get(romans, min(99, l.level)),
+    "cxp": 166 + ((l.fi + l.fe) / 2 - (l.fj + l.fn) / 2) * 58,
+    "roofy": 214 + (l.fi + l.fj) * 29 - l.hgt - (l.mark == "pitch" || l.mark == "mast" ? 18 : 12),
+    "stop": indexOf(stopOf, l.id),
+    "askid": find(asks, c => c.pillar == l.id) == null ? "" : find(asks, c => c.pillar == l.id).id
+  }))
+  let lots4 = lots3.map(l => merge(l, {"pw": (len(l.title) + 1 + len(l.lv) + (l.up ? 1 : 0)) * 7.5 + 12, "ty": l.roofy - 14}))
+  let lots5 = lots4.map(l => merge(l, {"x0": clamp(l.cxp - l.pw / 2, 4, 556 - l.pw)}))
+  let labelOps = flatten([
+    flatten(lots5.map(l => flatten([
+      [{"k": "rect", "x": l.x0, "y": l.ty - 9, "w": l.pw, "h": 18, "fill": alpha(background, 0.8), "stroke": muted},
+       {"k": "text", "x": l.x0 + 6, "y": l.ty, "size": 12.5, "align": "start", "spans": flatten([
+         [{"text": sub(l.title, 0, 1), "color": accent, "bold": true}, {"text": sub(l.title, 1) + " ", "color": l.id == top ? accent : foreground}, {"text": l.lv, "color": accent}],
+         l.up ? [{"text": "✦", "color": yellow}] : []])}],
+      l.stop > 0 ? [{"k": "text", "x": l.x0 - 8, "y": l.ty, "size": 13, "align": "center", "color": accent, "bold": true, "text": str(l.stop + 1)}] : [],
+      l.askid != "" ? [{"k": "circle", "fill": magenta, "r": 7.5, "pts": [[l.x0 + l.pw + 10, l.ty]]}, {"k": "text", "x": l.x0 + l.pw + 10, "y": l.ty + 0.5, "size": 11, "align": "center", "color": background, "bold": true, "text": "?"}] : [],
+      l.id == top ? [{"k": "text", "x": 166 + (l.i + 0.45 - l.j - 0.8) * 58 - 11, "y": 214 + (l.i + 0.45 + l.j + 0.8) * 29 - 2, "size": 12, "align": "center", "color": accent, "bold": true, "text": "@"}] : []
+    ]))),
+    [{"k": "text", "x": 14, "y": 20, "size": 12, "align": "start", "color": muted, "text": "C.O.R.E."},
+     {"k": "text", "x": 330, "y": 20, "size": 12, "align": "start", "color": muted, "text": "C.R.A.F.T."},
+     {"k": "text", "x": bmx + 4, "y": bmy + 26, "size": 12, "align": "center", "color": foreground, "text": "streak ${streak.days ?? 0}"},
+     {"k": "text", "x": bmx + 4, "y": bmy + 39, "size": 12, "align": "center", "color": streak.today == true ? green : accent, "text": streak.today == true ? "today kept" : "rest day ›"}]
+  ])
+  // taps, in the same px: boats, rest day, ? bubbles, then lots
+  let boatBox = range(len(props)).map(k => {"n": k,
+    "x0": 166 + (get(spot, get(props, k).pillar)[0] * G + 1.25 - get(spot, get(props, k).pillar)[1] * G - 1) * 58 + 18 + k * 30 - 12,
+    "y0": 214 + (get(spot, get(props, k).pillar)[0] * G + 1.25 + get(spot, get(props, k).pillar)[1] * G + 1) * 29 + 26 - 16})
+  let boatBoxes = boatBox.map(b => merge(b, {"x1": b.x0 + 24, "y1": b.y0 + 24}))
+  let askBoxes = lots5.filter(l => l.askid != "").map(l => {"id": l.askid, "x0": l.x0 + l.pw + 1, "y0": l.ty - 9, "x1": l.x0 + l.pw + 19, "y1": l.ty + 9})
+  let scale = (screenWidth - 24) / 582
+
+  // ---------------------------------------------------------------- the scene, front to back
+  let sceneStill = flatten([sky, proj.filter(d => d.g == 0), proj.filter(d => d.g == 2), rain])
+  let sceneFull = flatten([sky, proj.filter(d => d.g == 0), proj.filter(d => d.g == 1), proj.filter(d => d.g == 2), labelOps, rain])
+
+  // The renderer: the same scene whole (still: false) or scaled down for the
+  // tile (still: true), without the sailboats and labels.
+  component Isles(still) {
+    Canvas {
+      onTap: {
+        if still {
+          screen()
+        } else {
+          let X = x / scale
+          let Y = y / scale
+          let boat = find(boatBoxes, b => X >= b.x0 && X <= b.x1 && Y >= b.y0 && Y <= b.y1)
+          let ask = find(askBoxes, b => X >= b.x0 && X <= b.x1 && Y >= b.y0 && Y <= b.y1)
+          let ii = ((X - 166) / 58 + (Y - 214) / 29) / 2
+          let jj = ((Y - 214) / 29 - (X - 166) / 58) / 2
+          let lot = last(sortBy(lots2.filter(l => ii >= l.i - 0.16 && ii <= l.i + G2 && jj >= l.j - 0.16 && jj <= l.j + G2), l => l.i + l.j))
+          if boat != null {
+            pop = "prop:" + get(props, boat.n).id
+          } else if ask != null {
+            pop = "ask:" + ask.id
+          } else if streak.today != true && X >= bmx - 36 && X <= bmx + 44 && Y >= bmy + 30 && Y <= bmy + 48 {
+            run("acta rest --via board")
+          } else if lot != null {
+            pop = "lot:" + lot.id
+          }
+        }
+      }
+      let k = still ? min(width / 582, height / 470) : width / 582
+      translate((width - 582 * k) / 2, still ? (height - 470 * k) / 2 : 0) {
+        scale(k) {
+          for d in (still ? sceneStill : sceneFull) {
+            if d.k == "poly" {
+              path(d.pts, closed: true, fill: d.fill, stroke: d.stroke, width: d.w ?? 1)
+            } else if d.k == "line" {
+              line(d.pts[0][0], d.pts[0][1], d.pts[1][0], d.pts[1][1], stroke: d.stroke, width: d.w ?? 1)
+            } else if d.k == "circle" {
+              circle(d.pts[0][0], d.pts[0][1], d.r, fill: d.fill, stroke: d.stroke, width: d.w ?? 1)
+            } else if d.k == "rect" {
+              rect(d.x, d.y, d.w, d.h, fill: d.fill, stroke: d.stroke, width: 1)
+            } else if d.k == "text" {
+              text(d.spans ?? d.text, d.x, d.y, size: d.size, color: d.color, align: d.align, bold: d.bold ?? false, font: mono)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- selections for the popups
+  let selLot = find(lots5, l => "lot:" + l.id == pop)
+  let selProp = find(props, p => "prop:" + p.id == pop)
+  let selAsk = find(asks, c => "ask:" + c.id == pop)
+  let tags = (match(draft, "#([A-Za-z]+)") ?? [""])[0]
+  let tagged = tags == "" ? [] : ids.filter(id => startsWith(id, lower(tags)))
+
+  // ---------------------------------------------------------------- the tile
+  onTap: screen()
+  Column {
+    gap: 4
+    fill: true
+    Text { text: "Duae Insulae · two islands"; style: label; font: mono; color: muted }
+    Row {
+      gap: 8
+      align: bottom
+      Text { text: overall; style: title; font: mono; color: accent }
+      Text { text: "streak ${streak.days ?? 0} · ${dueN} due"; style: small; font: mono; color: foreground }
+    }
+  }
+
+  // ---------------------------------------------------------------- the map
+  screen {
+    Column {
+      gap: 8
+      fill: true
+      Row {
+        gap: 8
+        Text { text: "Duae Insulae · two islands"; style: label; font: mono; weight: 1 }
+        if len(s.errors ?? []) > 0 {
+          Text { text: "●"; style: small; font: mono; color: red }
+        }
+        Text { text: "${fmtTime(clk, "HH:mm")} ${phase} · ${wx} · ? ${len(asks)}"; style: small; font: mono; color: muted }
+        Button { text: "✕"; padding: 2; onTap: close() }
+      }
+      Column {
+        Isles { still: false; fill: width; height: (screenWidth - 24) * 470 / 582 }
+        // A boat or "review": the proposal
+        Popup {
+          visible: selProp != null
+          onDismiss: pop = ""
+          Column {
+            gap: 4
+            Text { text: "Proposal · ${get(titles, selProp.pillar ?? "career")}"; style: label; font: mono; color: cyan }
+            Text { text: selProp.title ?? ""; font: mono; style: body; maxLines: 2 }
+            Text { text: "from ${selProp.from ?? "?"} · p${selProp.priority ?? 2} · ${selProp.every ?? "once"}"; style: small; font: mono; color: muted }
+            Row {
+              gap: 8
+              Button { text: "accept"; color: green; onTap: { run("acta quest accept ${sh(selProp.id)} --via board"); pop = "" } }
+              Button { text: "decline"; color: red; onTap: { run("acta quest decline ${sh(selProp.id)} --via board"); pop = "" } }
+            }
+          }
+        }
+        // A ? bubble or "? N waiting": the question
+        Popup {
+          visible: selAsk != null
+          onDismiss: pop = ""
+          Column {
+            gap: 4
+            Text { text: "Check-in · ${get(titles, selAsk.pillar ?? "career")}"; style: label; font: mono; color: magenta }
+            Text { text: selAsk.question ?? ""; font: mono; style: body; maxLines: 3 }
+            if selAsk != null {
+              Input { placeholder: "your answer"; onChange: answer = value; width: 220 }
+            }
+            Row {
+              gap: 8
+              Button { text: "send"; color: green; onTap: { if trim(answer) != "" { run("acta checkin answer ${sh(selAsk.id)} --text ${sh(trim(answer))} --via board"); answer = ""; pop = "" } } }
+              Button { text: "later"; color: muted; onTap: { pop = "" } }
+            }
+          }
+        }
+        // A lot: the pillar
+        Popup {
+          visible: selLot != null
+          onDismiss: pop = ""
+          Column {
+            gap: 4
+            Row {
+              gap: 8
+              Text { spans: [{"text": sub(selLot.title ?? "Career", 0, 1), "color": accent, "bold": true}, {"text": sub(selLot.title ?? "Career", 1), "color": foreground}]; style: label; font: mono }
+              Text { text: selLot.lv ?? ""; style: label; font: mono; color: accent }
+            }
+            Text { text: "${(find(s.pillars ?? [], q => q.pillar == (selLot.id ?? "")) ?? {}).into ?? 0}/${(find(s.pillars ?? [], q => q.pillar == (selLot.id ?? "")) ?? {}).need ?? 100} xp · ${selLot.w7 ?? 0} in 7 days"; style: small; font: mono; color: muted }
+            for q in openq.filter(q => q.pillar == (selLot.id ?? "")) {
+              Row {
+                gap: 6
+                Text { text: q.title; style: small; font: mono; maxLines: 1 }
+                Button { text: "✓"; color: green; onTap: { run("acta quest done ${sh(q.id)} --via board"); pop = "" } }
+              }
+            }
+            Button { text: "add a quest"; color: accent; onTap: { seed = "#${selLot.title}"; draft = seed; pop = "" } }
+          }
+        }
+      }
+      Row {
+        gap: 14
+        fill: width
+        Column {
+          weight: 1
+          gap: 2
+          Column {
+          weight: 1
+          scroll: true
+          gap: 2
+          Row {
+            fill: width
+            Text { text: "Iter · today's route"; style: small; font: mono; color: muted; weight: 1 }
+            Text { text: "${dueN} due"; style: small; font: mono; color: muted }
+          }
+          for q, i in shown {
+            Column {
+              gap: 0
+              fill: width
+              Row {
+                gap: 6
+                fill: width
+                align: center
+                Text { text: i == 0 ? "@" : "${i + 1}"; style: small; font: mono; bold: true; color: accent }
+                Text { text: q.title; style: small; font: mono; maxLines: 1; weight: 1 }
+                Text { text: get(titles, q.pillar); style: small; font: mono; color: muted; maxLines: 1 }
+                if (q.overdue_days ?? 0) > 0 {
+                  Text { text: "${q.overdue_days}d"; style: small; font: mono; color: red }
+                }
+                Text { text: "✓"; style: small; font: mono; color: green; padding: 1; onTap: run("acta quest done ${sh(q.id)} --via board") }
+                Row {
+                  Text { text: "⋯"; style: small; font: mono; color: muted; padding: 1; onTap: pop = "menu:" + q.id }
+                  Popup {
+                    visible: pop == "menu:" + q.id
+                    onDismiss: pop = ""
+                    Column {
+                      gap: 2
+                      Row {
+                        gap: 6
+                        Button { text: "1d"; onTap: { run("acta quest snooze ${sh(q.id)} --until ${fmtTime(clk + 86400, "yyyy-MM-dd")} --via board"); pop = "" } }
+                        Button { text: "3d"; onTap: { run("acta quest snooze ${sh(q.id)} --until ${fmtTime(clk + 3 * 86400, "yyyy-MM-dd")} --via board"); pop = "" } }
+                        Button { text: "7d"; onTap: { run("acta quest snooze ${sh(q.id)} --until ${fmtTime(clk + 7 * 86400, "yyyy-MM-dd")} --via board"); pop = "" } }
+                      }
+                      Row {
+                        gap: 6
+                        Button { text: "priority ↑"; onTap: { run("acta quest edit ${sh(q.id)} --priority 1 --via board"); pop = "" } }
+                        Button { text: "priority ↓"; onTap: { run("acta quest edit ${sh(q.id)} --priority 3 --via board"); pop = "" } }
+                      }
+                      Button { text: "drop"; color: red; onTap: { run("acta quest drop ${sh(q.id)} --via board"); pop = "" } }
+                    }
+                  }
+                }
+              }
+              Text { text: join(take(q.reasons ?? [], 2), " · "); style: small; font: mono; color: muted; maxLines: 1 }
+            }
+          }
+          if len(openq) > 4 {
+            Text { text: "+${len(openq) - 4} more ↓"; style: small; font: mono; color: muted }
+          }
+          for q in doneq {
+            Row {
+              gap: 6
+              fill: width
+              Box {
+                weight: 1
+                align: center
+                Text { text: q.title; style: small; font: mono; color: muted; maxLines: 1 }
+                Box { height: 1; fill: width; background: muted }
+              }
+              Text { text: "↺"; style: small; font: mono; color: muted; padding: 1; onTap: run("acta quest undo ${sh(q.id)} --via board") }
+            }
+          }
+          }
+          if len(props) > 0 {
+            Row {
+              gap: 6
+              fill: width
+              Text { text: "◇ ${len(props)} proposed, moored off the islands"; style: small; font: mono; color: cyan; weight: 1; maxLines: 1 }
+              Text { text: "review"; style: small; font: mono; color: cyan; padding: 1; onTap: pop = "prop:" + first(props).id }
+            }
+          }
+          Input {
+            fill: width
+            text: seed
+            clear: true
+            placeholder: "add a quest  #Pillar"
+            fontSize: 12
+            onChange: { draft = value; hint = "" }
+            onSubmit: {
+              let title = trim(replace(value, "#" + tags, ""))
+              if title != "" && len(tagged) == 1 {
+                run("acta quest add --pillar ${first(tagged)} --title ${sh(title)} --via board")
+                draft = ""
+                seed = ""
+                hint = ""
+              } else {
+                hint = len(tagged) == 1 ? "give it a title" : "tag one pillar, like #Career"
+              }
+            }
+          }
+          if hint != "" {
+            Text { text: hint; style: small; font: mono; color: red; maxLines: 1 }
+          }
+        }
+        Column {
+          width: 141
+          gap: 4
+          Text { text: "Gradus · level"; style: small; font: mono; color: muted }
+          Row {
+            gap: 6
+            align: bottom
+            Text { text: overall; style: title; font: mono; color: accent }
+            Text { text: "${xp.into ?? 0}/${xp.need ?? 100} xp"; style: small; font: mono; color: muted }
+          }
+          Progress { value: xp.into ?? 0; max: xp.need ?? 100; color: accent }
+          Text { text: "streak · ${streak.days ?? 0} ${streak.days == 1 ? "day" : "days"}"; style: small; font: mono }
+          if streak.today == true {
+            Text { text: "today kept"; style: small; font: mono; color: green }
+          } else {
+            Text { text: "rest day ›"; style: small; font: mono; color: accent; padding: 0; onTap: run("acta rest --via board") }
+          }
+          Sparkline { values: s.history ?? []; color: accent; height: 28 }
+          Text { text: "Rogationes · check-ins"; style: small; font: mono; color: muted; maxLines: 1 }
+          if len(asks) > 0 {
+            Text { text: "? ${len(asks)} waiting"; style: small; font: mono; color: magenta; padding: 0; onTap: pop = "ask:" + first(asks).id }
+            Text { text: join(asks.map(c => get(titles, c.pillar)), ", "); style: small; font: mono; color: muted; maxLines: 2 }
+          } else {
+            Text { text: "none open"; style: small; font: mono; color: muted }
+          }
+        }
+      }
+    }
+  }
+}

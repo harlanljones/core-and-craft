@@ -64,6 +64,7 @@ type Skill struct {
 type Pillar struct {
 	Pillar   string `json:"pillar"`
 	Events7d int    `json:"events_7d"`
+	Today    int    `json:"today"`
 	XP       int    `json:"xp"`
 	Level    int    `json:"level"`
 	Into     int    `json:"into"`
@@ -92,6 +93,9 @@ type Snapshot struct {
 	XP       Level       `json:"xp"`
 	Streak   Streak      `json:"streak"`
 	History  []int       `json:"history"`
+	// LeveledToday lists the pillars that passed a level boundary today, in
+	// framework order, for the town's ✦.
+	LeveledToday []string `json:"leveled_today"`
 }
 
 // Effective drops retracted events and events superseded by a live one.
@@ -281,9 +285,11 @@ func Build(evs []event.Event, bad []store.LineError, src Source, now time.Time, 
 
 	cutoff7 := now.Add(-7 * 24 * time.Hour)
 	pillarCount := map[string]int{}
+	todayCount := map[string]int{}
 	for _, e := range live {
 		if e.LocalDate(loc) == today {
 			snap.Today.Events++
+			todayCount[e.Pillar]++
 			if e.Kind == "typing.test" {
 				snap.Today.TypingTests++
 			}
@@ -293,7 +299,7 @@ func Build(evs []event.Event, bad []store.LineError, src Source, now time.Time, 
 		}
 	}
 	for _, p := range event.Pillars {
-		snap.Pillars = append(snap.Pillars, Pillar{Pillar: p, Events7d: pillarCount[p]})
+		snap.Pillars = append(snap.Pillars, Pillar{Pillar: p, Events7d: pillarCount[p], Today: todayCount[p]})
 	}
 
 	runsByDay := map[string]map[string]int{}
@@ -441,7 +447,9 @@ func Build(evs []event.Event, bad []store.LineError, src Source, now time.Time, 
 		questByID[q.ID] = q
 	}
 	var perPillar map[string]Level
-	snap.XP, perPillar, snap.History = rollUp(gains(live, xpInputs{runsByDay: runsByDay, skills: snap.Skills, quests: questByID}, loc), todayT)
+	gs := gains(live, xpInputs{runsByDay: runsByDay, skills: snap.Skills, quests: questByID}, loc)
+	snap.XP, perPillar, snap.History = rollUp(gs, todayT)
+	snap.LeveledToday = leveledToday(gs, todayT)
 	for i := range snap.Pillars {
 		l := perPillar[snap.Pillars[i].Pillar]
 		snap.Pillars[i].XP, snap.Pillars[i].Level, snap.Pillars[i].Into, snap.Pillars[i].Need = l.Total, l.Level, l.Into, l.Need
