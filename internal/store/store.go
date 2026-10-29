@@ -1,4 +1,4 @@
-// Package store reads and appends events.jsonl. Only lq writes the file,
+// Package store reads and appends events.jsonl. Only acta writes the file,
 // one writer at a time under flock, one line per event.
 package store
 
@@ -101,7 +101,7 @@ func Append(path string, evs []event.Event) (Result, error) {
 		return res, err
 	}
 	if len(bad) > 0 {
-		return res, fmt.Errorf("%s has %d invalid line(s), first at line %d: %s; run lq doctor", path, len(bad), bad[0].Line, bad[0].Err)
+		return res, fmt.Errorf("%s has %d invalid line(s), first at line %d: %s; run acta doctor", path, len(bad), bad[0].Line, bad[0].Err)
 	}
 	seen := make(map[string]bool, len(existing))
 	var last int64

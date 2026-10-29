@@ -1,14 +1,14 @@
-// Command lq is the only writer of the LifeQuest event log and the
+// Command acta is the only writer of the CORE & CRAFT event log and the
 // builder of the snapshot the widgets read.
 //
-//	lq init                     create the data and state directories
-//	lq mt pull [--all]          archive new Monkeytype results
-//	lq log <kind> [flags]       append one event
-//	lq retract <id> [flags]     append event.retracted for an event
-//	lq ingest [file...]         append inbox files written by remote agents
-//	lq snapshot                 rebuild snapshot.json from the log
-//	lq status [--json]          one line for a bar widget
-//	lq doctor                   check the log's invariants
+//	acta init                   create the data and state directories
+//	acta mt pull [--all]        archive new Monkeytype results
+//	acta log <kind> [flags]     append one event
+//	acta retract <id> [flags]   append event.retracted for an event
+//	acta ingest [file...]       append inbox files written by remote agents
+//	acta snapshot               rebuild snapshot.json from the log
+//	acta status [--json]        one line for a bar widget
+//	acta doctor                 check the log's invariants
 package main
 
 import (
@@ -53,20 +53,20 @@ func defaultEnv() (env, error) {
 	if err != nil {
 		return env{}, err
 	}
-	data := os.Getenv("LQ_DATA")
+	data := os.Getenv("ACTA_DATA")
 	if data == "" {
-		data = filepath.Join(home, "life")
+		data = filepath.Join(home, "core-and-craft")
 	}
-	state := os.Getenv("LQ_STATE")
+	state := os.Getenv("ACTA_STATE")
 	if state == "" {
 		base := os.Getenv("XDG_STATE_HOME")
 		if base == "" {
 			base = filepath.Join(home, ".local", "state")
 		}
-		state = filepath.Join(base, "lifequest")
+		state = filepath.Join(base, "core-and-craft")
 	}
 	loc := time.Local
-	if tz := os.Getenv("LQ_TZ"); tz != "" {
+	if tz := os.Getenv("ACTA_TZ"); tz != "" {
 		if l, err := time.LoadLocation(tz); err == nil {
 			loc = l
 		}
@@ -77,13 +77,13 @@ func defaultEnv() (env, error) {
 func main() {
 	e, err := defaultEnv()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "lq:", err)
+		fmt.Fprintln(os.Stderr, "acta:", err)
 		os.Exit(1)
 	}
 	os.Exit(run(e, os.Args[1:]))
 }
 
-const usage = `usage: lq <command>
+const usage = `usage: acta <command>
   init | mt pull [--all] | log <kind> | retract <id> | ingest [file...] | snapshot | status [--json] | doctor | version`
 
 func run(e env, args []string) int {
@@ -97,7 +97,7 @@ func run(e env, args []string) int {
 		err = cmdInit(e)
 	case "mt":
 		if len(args) < 2 || args[1] != "pull" {
-			fmt.Fprintln(e.stderr, "usage: lq mt pull [--all]")
+			fmt.Fprintln(e.stderr, "usage: acta mt pull [--all]")
 			return 2
 		}
 		err = cmdMtPull(e, args[2:])
@@ -114,15 +114,15 @@ func run(e env, args []string) int {
 	case "doctor":
 		err = cmdDoctor(e)
 	case "version":
-		fmt.Fprintln(e.stdout, "lq", version)
+		fmt.Fprintln(e.stdout, "acta", version)
 	case "-h", "--help", "help":
 		fmt.Fprintln(e.stdout, usage)
 	default:
-		fmt.Fprintf(e.stderr, "lq: unknown command %q\n%s\n", args[0], usage)
+		fmt.Fprintf(e.stderr, "acta: unknown command %q\n%s\n", args[0], usage)
 		return 2
 	}
 	if err != nil {
-		fmt.Fprintln(e.stderr, "lq:", err)
+		fmt.Fprintln(e.stderr, "acta:", err)
 		return 1
 	}
 	return 0
@@ -212,7 +212,7 @@ func cmdMtPull(e env, args []string) error {
 
 func cmdLog(e env, args []string) error {
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		return errors.New("usage: lq log <kind> --subject S --agent A [--pillar P] [--data JSON] [--at T] [--via V] [--note N] [--ref R] [--supersedes ID]")
+		return errors.New("usage: acta log <kind> --subject S --agent A [--pillar P] [--data JSON] [--at T] [--via V] [--note N] [--ref R] [--supersedes ID]")
 	}
 	kind := args[0]
 	fs := flag.NewFlagSet("log", flag.ContinueOnError)
@@ -222,7 +222,7 @@ func cmdLog(e env, args []string) error {
 	data := fs.String("data", "{}", "kind-specific JSON object")
 	at := fs.String("at", "", "RFC 3339 time or YYYY-MM-DD (default now)")
 	via := fs.String("via", "manual", "chat, manual, keybr, ...")
-	agent := fs.String("agent", "", "writer: lq, claude-code, hermes, manual or duet:<channel>")
+	agent := fs.String("agent", "", "writer: acta, claude-code, hermes, manual or duet:<channel>")
 	note := fs.String("note", "", "free text")
 	ref := fs.String("ref", "", "source reference")
 	supersedes := fs.String("supersedes", "", "id of the event this corrects")
@@ -238,7 +238,7 @@ func cmdLog(e env, args []string) error {
 
 func cmdRetract(e env, args []string) error {
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		return errors.New("usage: lq retract <id> --agent A [--reason R] [--pillar P]")
+		return errors.New("usage: acta retract <id> --agent A [--reason R] [--pillar P]")
 	}
 	target := args[0]
 	fs := flag.NewFlagSet("retract", flag.ContinueOnError)
@@ -314,8 +314,8 @@ func appendOne(e env, ev event.Event) error {
 	return nil
 }
 
-// readInbox parses one inbox file. Lines may omit id (lq computes it) and
-// must omit or ignore seq (lq assigns it). Any bad line rejects the file.
+// readInbox parses one inbox file. Lines may omit id (acta computes it) and
+// must omit or ignore seq (acta assigns it). Any bad line rejects the file.
 func readInbox(path string) ([]event.Event, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -384,7 +384,7 @@ func cmdIngest(e env, args []string) error {
 	for _, p := range files {
 		evs, err := readInbox(p)
 		if err != nil {
-			fmt.Fprintf(e.stderr, "lq: %s rejected:\n%v\n", filepath.Base(p), err)
+			fmt.Fprintf(e.stderr, "acta: %s rejected:\n%v\n", filepath.Base(p), err)
 			failed = append(failed, filepath.Base(p))
 			continue
 		}
@@ -427,7 +427,7 @@ func cmdSnapshot(e env) error {
 func cmdStatus(e env, args []string) error {
 	b, err := os.ReadFile(e.snapshotPath())
 	if err != nil {
-		return fmt.Errorf("no snapshot yet: run lq snapshot (%w)", err)
+		return fmt.Errorf("no snapshot yet: run acta snapshot (%w)", err)
 	}
 	if len(args) > 0 && args[0] == "--json" {
 		_, err := e.stdout.Write(b)

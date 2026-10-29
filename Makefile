@@ -5,7 +5,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 .PHONY: build test check-widgets install install-units uninstall-units install-board
 
 build:
-	go build -ldflags "-X main.version=$(VERSION)" -o bin/lq ./cmd/lq
+	go build -ldflags "-X main.version=$(VERSION)" -o bin/acta ./cmd/acta
 
 test:
 	go vet ./...
@@ -16,15 +16,15 @@ check-widgets: build
 	board/test/check.sh
 
 install: build
-	install -Dm755 bin/lq $(PREFIX)/bin/lq
+	install -Dm755 bin/acta $(PREFIX)/bin/acta
 
 install-units:
 	install -Dm644 -t $(UNITDIR) systemd/*
 	systemctl --user daemon-reload
-	systemctl --user enable --now lifequest-mt.timer lifequest-snapshot.path
+	systemctl --user enable --now acta-mt.timer acta-snapshot.path
 
 uninstall-units:
-	-systemctl --user disable --now lifequest-mt.timer lifequest-snapshot.path
+	-systemctl --user disable --now acta-mt.timer acta-snapshot.path
 	cd systemd && for u in *; do rm -f $(UNITDIR)/$$u; done
 	systemctl --user daemon-reload
 

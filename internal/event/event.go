@@ -40,7 +40,7 @@ var Kinds = []string{
 }
 
 // Agents that may write. duet:<channel> covers the Claude Duet channels.
-var agentExact = []string{"lq", "lq-mt", "claude-code", "hermes", "manual"}
+var agentExact = []string{"acta", "acta-mt", "claude-code", "hermes", "manual"}
 
 const agentDuetPrefix = "duet:"
 
@@ -115,7 +115,7 @@ func (e Event) LocalDate(loc *time.Location) string {
 }
 
 // Validate checks one event. requireSeq is false for inbox files, where
-// lq assigns seq on ingest.
+// acta assigns seq on ingest.
 func Validate(e Event, requireSeq bool) error {
 	var errs []error
 	add := func(format string, a ...any) { errs = append(errs, fmt.Errorf(format, a...)) }
@@ -193,7 +193,7 @@ func canonical(raw []byte) ([]byte, error) {
 
 // NativeID is evt_ plus the first 16 hex chars of sha256 over the canonical
 // JSON of {agent, at, data, kind, recorded_at, subject}. seq is left out so
-// remote writers can name an event before lq assigns its seq.
+// remote writers can name an event before acta assigns its seq.
 func NativeID(e Event) (string, error) {
 	data := e.Data
 	if len(bytes.TrimSpace(data)) == 0 {

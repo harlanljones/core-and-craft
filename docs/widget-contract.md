@@ -1,8 +1,8 @@
 # Widget contract: snapshot.json
 
-Widgets never read `events.jsonl`. They read `$LQ_STATE/snapshot.json` (default `~/.local/state/lifequest/snapshot.json`), which `lq snapshot` replaces atomically (temp file, fsync, rename), so a `file(...) json` watcher in the OWL board or a `FileView` in a bar `Service.qml` always sees a whole file.
+Widgets never read `events.jsonl`. They read `$ACTA_STATE/snapshot.json` (default `~/.local/state/core-and-craft/snapshot.json`), which `acta snapshot` replaces atomically (temp file, fsync, rename), so a `file(...) json` watcher in the OWL board or a `FileView` in a bar `Service.qml` always sees a whole file.
 
-`lifequest-snapshot.path` rebuilds it whenever the log changes; `lifequest-mt.service` rebuilds it after each Monkeytype pull.
+`acta-snapshot.path` rebuilds it whenever the log changes; `acta-mt.service` rebuilds it after each Monkeytype pull.
 
 ## Shape (v1)
 
@@ -33,10 +33,10 @@ Widgets never read `events.jsonl`. They read `$LQ_STATE/snapshot.json` (default 
 
 ## For a bar pill
 
-`lq status` prints one line, e.g. `typing 88/100 wpm · 5 today`; `lq status --json` prints the snapshot.
+`acta status` prints one line, e.g. `typing 88/100 wpm · 5 today`; `acta status --json` prints the snapshot.
 
 ## Tiles
 
 `widgets/60-typing.owl` (3x2) reads `file("~/.local/state/core-and-craft/snapshot.json") json`. It shows the best qualifying wpm with the target, `runs_qualifying/runs_total`, today's best and count, a progress bar when a target is set, and a 30-character strip of `daily`, one character per day. `make check-widgets` renders every tile against the seed, the seed plus a target, and a missing snapshot.
 
-A tile reads the default path. A board running with `LQ_STATE` set elsewhere has to edit the tile's path.
+A tile reads the default path. A board running with `ACTA_STATE` set elsewhere has to edit the tile's path.

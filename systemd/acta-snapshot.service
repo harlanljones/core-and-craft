@@ -1,0 +1,7 @@
+[Unit]
+Description=CORE & CRAFT: rebuild snapshot.json
+
+[Service]
+Type=oneshot
+Environment=ACTA_DATA=%h/core-and-craft ACTA_STATE=%h/.local/state/core-and-craft
+ExecStart=%h/.local/bin/acta snapshot

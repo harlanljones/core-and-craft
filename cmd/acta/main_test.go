@@ -23,7 +23,7 @@ func testEnv(t *testing.T, vars map[string]string) (env, *bytes.Buffer, *bytes.B
 	la, _ := time.LoadLocation("America/Los_Angeles")
 	var out, errb bytes.Buffer
 	return env{
-		data:   filepath.Join(dir, "life"),
+		data:   filepath.Join(dir, "data"),
 		state:  filepath.Join(dir, "state"),
 		loc:    la,
 		now:    func() time.Time { return time.Date(2026, 10, 29, 12, 0, 0, 0, la) },
@@ -36,7 +36,7 @@ func testEnv(t *testing.T, vars map[string]string) (env, *bytes.Buffer, *bytes.B
 func mustRun(t *testing.T, e env, args ...string) {
 	t.Helper()
 	if code := run(e, args); code != 0 {
-		t.Fatalf("lq %s exited %d: %s", strings.Join(args, " "), code, e.stderr.(*bytes.Buffer).String())
+		t.Fatalf("acta %s exited %d: %s", strings.Join(args, " "), code, e.stderr.(*bytes.Buffer).String())
 	}
 }
 

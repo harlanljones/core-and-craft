@@ -7,7 +7,7 @@ widget "typing" {
   meta { owl: 10; description: "Typing (competence): best qualifying wpm, the target, today's runs and the last 30 days"; version: "0.1"; license: "MIT"; category: "productivity" }
 
   // The widget contract (docs/widget-contract.md): read snapshot.json, never
-  // events.jsonl. lq snapshot replaces it atomically, so it is always whole.
+  // events.jsonl. acta snapshot replaces it atomically, so it is always whole.
   source s = file("~/.local/state/core-and-craft/snapshot.json") json
 
   let sk = (s.skills ?? []).filter(k => k.id == "skill:typing").first()

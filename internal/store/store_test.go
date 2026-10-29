@@ -15,7 +15,7 @@ func ev(id string) event.Event {
 	return event.Event{
 		ID: id, V: 1, At: "2026-10-29", AtPrecision: event.PrecisionDay,
 		RecordedAt: "2026-10-29T17:45:00Z", Pillar: "competence", Kind: "typing.test",
-		Subject: "skill:typing", Source: event.Source{Via: "chat", Agent: "lq"},
+		Subject: "skill:typing", Source: event.Source{Via: "chat", Agent: "acta"},
 		Data: json.RawMessage(`{"wpm":80,"acc":97}`),
 	}
 }

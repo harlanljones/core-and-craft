@@ -1,29 +1,29 @@
 #!/usr/bin/env bash
 # Compiles and evaluates every widget in widgets/ with the vendored OWL
 # runtime (Owl.js under node, the same code the Quickshell board runs)
-# against snapshots built by the real lq from seed/, and fails on compile
+# against snapshots built by the real acta from seed/, and fails on compile
 # errors or ERROR values in the render tree.
 #
-#   board/test/check.sh      (needs node, jq and bin/lq from `make build`)
+#   board/test/check.sh      (needs node, jq and bin/acta from `make build`)
 set -euo pipefail
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 root=$(cd -- "$here/../.." && pwd)
 owl="$root/board/plugin/owl/Owl.js"
-lq="$root/bin/lq"
-[ -x "$lq" ] || { echo "no $lq: run make build" >&2; exit 1; }
+acta="$root/bin/acta"
+[ -x "$acta" ] || { echo "no $acta: run make build" >&2; exit 1; }
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$here/out"
 
-# snap <name> [lq log args...]: a snapshot from the seed plus one optional event.
+# snap <name> [acta log args...]: a snapshot from the seed plus one optional event.
 snap() {
   local name=$1; shift
-  export LQ_DATA="$tmp/$name/data" LQ_STATE="$tmp/$name/state" LQ_TZ=UTC
-  "$lq" init >/dev/null
-  cp "$root"/seed/*.jsonl "$LQ_DATA/inbox/"
-  "$lq" ingest >/dev/null
-  [ $# -gt 0 ] && "$lq" log "$@" >/dev/null
-  "$lq" snapshot >/dev/null
-  cat "$LQ_STATE/snapshot.json"
+  export ACTA_DATA="$tmp/$name/data" ACTA_STATE="$tmp/$name/state" ACTA_TZ=UTC
+  "$acta" init >/dev/null
+  cp "$root"/seed/*.jsonl "$ACTA_DATA/inbox/"
+  "$acta" ingest >/dev/null
+  [ $# -gt 0 ] && "$acta" log "$@" >/dev/null
+  "$acta" snapshot >/dev/null
+  cat "$ACTA_STATE/snapshot.json"
 }
 seed=$(snap seed)
 target=$(snap target skill.target_set --subject skill:typing --agent manual --data '{"metric":"wpm","target":100}')
