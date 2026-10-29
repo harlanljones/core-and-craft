@@ -63,6 +63,15 @@ Append `event.retracted` (`acta retract <id>`) or a new event with `supersedes`.
 
 Cloud agents (Claude Duet channels) can't take the lock. They write whole files to `$ACTA_DATA/inbox/<recorded_at>-<agent>.jsonl`: one event per line, `seq` omitted, `id` optional (computed if missing). `acta ingest` validates each file; any bad line rejects the whole file and leaves it in place. Good files are appended (dedupe by id) and removed.
 
+### Duet route: Drive to inbox
+
+Duet channels run in the cloud and save finished files to the Google Drive folder "core-and-craft inbox" (raw `.jsonl`, not converted to a Google Doc). On the desktop, `acta-inbox.timer` runs `acta-inbox.service` every 5 minutes. The service does two steps:
+
+1. `rclone move ccinbox: ~/core-and-craft/inbox/ --include "*.jsonl" --drive-skip-gdocs` moves the files and deletes them from Drive. rclone writes `<name>.<rand>.partial` and renames it when the copy is whole. `acta ingest` globs only `*.jsonl`, so it never reads a partial file.
+2. `acta ingest` validates and appends them, as above.
+
+One-time setup: `rclone config create ccinbox drive scope=drive root_folder_id=<folder id>` and sign in with the folder owner's Google account. The token stays in `~/.config/rclone/rclone.conf`. A file that fails validation stays in the inbox and fails the unit; read the reason with `journalctl --user -u acta-inbox`.
+
 ## Mastery (day one: performance skills)
 
 A hand-logged `typing.test` (a screenshot read in chat) that an imported Monkeytype run repeats, with the same subject, local date, and wpm and acc rounded to whole numbers, is counted once, as the import. Each import stands in for at most one hand-logged run. Both stay in the log, so nothing needs retracting after the first pull.

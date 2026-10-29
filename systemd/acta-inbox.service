@@ -1,0 +1,17 @@
+[Unit]
+Description=CORE & CRAFT: pull Duet envelope files from Drive and ingest them
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=ACTA_DATA=%h/core-and-craft ACTA_STATE=%h/.local/state/core-and-craft
+# Remote `ccinbox:` is the Drive folder "core-and-craft inbox"; its token lives
+# in ~/.config/rclone/rclone.conf (rclone refreshes it, so the file must stay writable).
+# rclone writes <name>.<rand>.partial and renames it when whole, so acta's
+# `*.jsonl` glob never sees a half-copied file.
+ExecStart=%h/.local/bin/rclone move ccinbox: %h/core-and-craft/inbox/ --include "*.jsonl" --drive-skip-gdocs
+# A rejected file stays in the inbox and fails the unit, so it shows in `systemctl --user status`.
+ExecStartPost=%h/.local/bin/acta ingest
+NoNewPrivileges=yes
+PrivateTmp=yes
