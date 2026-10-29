@@ -73,6 +73,10 @@ const w = open(snap)
 w.tile().onTap()
 ok(JSON.stringify(w.take()) === '[["screen"]]', 'tile tap opens the screen')
 
+// ...and so does the still of the islands inside it
+find(w.tile().children, n => n.kind === 'Canvas')[0].h.onTap(40, 40)
+ok(JSON.stringify(w.take()) === '[["screen"]]', "a tap on the tile's still opens the screen")
+
 let sc = w.screen()
 // X -> close()
 byText(sc, '✕')[0].h.onTap(); ok(JSON.stringify(w.take()) === '[["close"]]', 'X closes the map')
