@@ -164,10 +164,30 @@ Item {
   // whatever drags -- a Flickable, the drawer gesture under Home.
   // One handler for both, so a long press (owl 10) isn't also a tap.
   TapHandler {
+    id: tap
     enabled: !!root.handlers.onTap || !!root.handlers.onLongPress
     gesturePolicy: TapHandler.ReleaseWithinBounds
     onTapped: (point) => { if (root.handlers.onTap) root.handlers.onTap(point.position.x / root.dp, point.position.y / root.dp) }
     onLongPressed: if (root.handlers.onLongPress) root.handlers.onLongPress(point.position.x / root.dp, point.position.y / root.dp)
+  }
+
+  // Feedback for anything that takes a tap, as Omarchy's own widgets give it: a
+  // pointing hand, a wash on hover and a deeper one while pressed, faded over
+  // 120 ms. A Canvas or a Popup is hit-tested by its own handler, so it gets none.
+  readonly property bool tappable: !!root.handlers.onTap && root.kind !== "Canvas" && root.kind !== "Popup"
+  HoverHandler {
+    id: hover
+    enabled: root.tappable
+    cursorShape: Qt.PointingHandCursor
+  }
+  Rectangle {
+    anchors.fill: parent
+    z: 1
+    visible: opacity > 0
+    radius: L.num(root.p.radius, 0) * root.dp
+    color: root.widget ? root.widget.ink("foreground") : "white"
+    opacity: !root.tappable ? 0 : tap.pressed ? 0.18 : hover.hovered ? 0.08 : 0
+    Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
   }
 
   DragHandler {
@@ -944,6 +964,11 @@ Item {
               : (menu.down + menu.height <= overlay.height || menu.up < 0 ? menu.down : menu.up)
             return Math.max(0, Math.min(y, overlay.height - menu.height))
           }
+          // Pops in as Omarchy's menus do: a 140 ms fade, rising 6 dp.
+          opacity: popup.shown ? 1 : 0
+          transform: Translate { y: popup.shown ? 0 : (menu.up >= 0 && root.p.position === "above" ? 6 : -6) * root.dp
+            Behavior on y { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } } }
+          Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
           color: popup.framed ? "transparent" : (root.widget ? root.widget.ink("background") : "black")
           border.width: popup.framed ? 0 : 2 * root.dp
           border.color: root.widget ? root.widget.ink("accent") : "white"
