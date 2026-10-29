@@ -4,7 +4,7 @@ widget "town" {
   size: 6x3
   minSize: 6x3
 
-  meta { owl: 10; description: "Duae Insulae (two islands): the nine pillars as isometric towers, today's route, level, streak and check-ins; tap for the full map"; version: "0.1"; license: "MIT"; category: "productivity" }
+  meta { owl: 10; description: "Provinciae (two provinces): the nine pillars as isometric towers, today's route, level, streak and check-ins; tap for the full map"; version: "0.1"; license: "MIT"; category: "productivity" }
 
   // The widget contract (docs/widget-contract.md): read snapshot.json, never
   // events.jsonl. The clock only decides day, dusk or night on the map.
@@ -260,7 +260,7 @@ widget "town" {
   Column {
     gap: 4
     fill: true
-    Text { text: "Duae Insulae · two islands"; style: label; font: mono; color: muted; maxLines: 1 }
+    Text { text: "Provinciae · two provinces"; style: label; font: mono; color: muted; maxLines: 1 }
     Row {
       gap: 8
       fill: true
@@ -272,7 +272,7 @@ widget "town" {
         Text { text: overall; style: huge; font: mono; color: accent; maxLines: 1 }
         Progress { value: xp.into ?? 0; max: xp.need ?? 100; color: accent; animate value: spring() }
         Text { text: "${xp.into ?? 0}/${xp.need ?? 100} xp"; style: small; font: mono; color: muted; maxLines: 1 }
-        Text { text: "streak ${streak.days ?? 0}"; style: small; font: mono; color: streak.today == true ? green : foreground; maxLines: 1 }
+        Text { text: "Pax · streak ${streak.days ?? 0}"; style: small; font: mono; color: streak.today == true ? green : foreground; maxLines: 1 }
       }
     }
   }
@@ -284,7 +284,7 @@ widget "town" {
       fill: true
       Row {
         gap: 8
-        Text { text: "Duae Insulae · two islands"; style: label; font: mono; weight: 1 }
+        Text { text: "Provinciae · two provinces"; style: label; font: mono; weight: 1 }
         if len(s.errors ?? []) > 0 {
           Text { text: "●"; style: small; font: mono; color: red }
         }
@@ -467,7 +467,7 @@ widget "town" {
             Text { text: "${xp.into ?? 0}/${xp.need ?? 100} xp"; style: small; font: mono; color: muted }
           }
           Progress { value: xp.into ?? 0; max: xp.need ?? 100; color: accent; animate value: spring() }
-          Text { text: "streak · ${streak.days ?? 0} ${streak.days == 1 ? "day" : "days"}"; style: small; font: mono }
+          Text { text: "Pax · streak · ${streak.days ?? 0} ${streak.days == 1 ? "day" : "days"}"; style: small; font: mono }
           if streak.today == true {
             Text { text: "today kept"; style: small; font: mono; color: green }
           } else {
