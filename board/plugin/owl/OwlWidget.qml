@@ -55,6 +55,8 @@ Item {
   property var tree: null
   property var screenTree: null
   property bool screenOpen: false
+  // Popups showing now, so the board's Esc closes a popup before the screen.
+  property int popupsOpen: 0
   property string error: ""
   property var problems: []
   // Bumped on every change, for bindings that re-read the instance.

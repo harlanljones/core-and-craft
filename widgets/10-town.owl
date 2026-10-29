@@ -346,7 +346,7 @@ widget "town" {
                 Button { text: "✓"; color: green; onTap: { run("acta quest done ${sh(q.id)} --via board"); pop = "" } }
               }
             }
-            Button { text: "add a quest"; color: accent; onTap: { seed = "#${selLot.title}"; draft = seed; pop = "" } }
+            Button { text: "add a quest"; color: accent; onTap: { seed = "#${selLot.title}"; draft = seed; hint = ""; pop = "" } }
           }
         }
       }
