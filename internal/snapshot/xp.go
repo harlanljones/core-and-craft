@@ -159,6 +159,29 @@ func rollUp(gs []xpGain, today time.Time) (Level, map[string]Level, []int) {
 	return levelOf(total), pillars, hist
 }
 
+// leveledToday lists the pillars whose level is higher with today's gains
+// than without them. Gains dated after today don't count.
+func leveledToday(gs []xpGain, today time.Time) []string {
+	todayS := today.Format("2006-01-02")
+	before, after := map[string]int{}, map[string]int{}
+	for _, g := range gs {
+		switch {
+		case g.date < todayS:
+			before[g.pillar] += g.xp
+			after[g.pillar] += g.xp
+		case g.date == todayS:
+			after[g.pillar] += g.xp
+		}
+	}
+	out := []string{}
+	for _, p := range event.Pillars {
+		if levelOf(after[p]).Level > levelOf(before[p]).Level {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // streakOf walks back from today over days with a non-import event or a rest.
 func streakOf(live []event.Event, today time.Time, loc *time.Location) Streak {
 	counted := map[string]bool{}

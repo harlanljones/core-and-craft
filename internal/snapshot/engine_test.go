@@ -3,6 +3,7 @@ package snapshot
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -157,5 +158,41 @@ func TestCheckinsInSnapshot(t *testing.T) {
 	cs := Build(l.evs, nil, Source{}, now, la).Checkins
 	if len(cs) != 2 || cs[0].ID != "checkin:sleep" || !cs[0].Open || cs[1].Open || cs[1].Answer != "shipped lq" || cs[1].Answered != "2026-10-28" {
 		t.Fatalf("checkins %+v", cs)
+	}
+}
+
+// pillars[].today counts the pillar's events dated today; leveled_today names
+// the pillars whose level today's xp raised (✦ on the town's signs).
+func TestPillarTodayAndLeveledToday(t *testing.T) {
+	l := &qlog{}
+	for i := 0; i < 6; i++ { // 6 notes x 15 = 90 xp yesterday: still level 1
+		l.add("note.added", "note:y"+string(rune('a'+i)), "manual", "2026-10-28", `{}`)
+	}
+	s := Build(l.evs, nil, Source{}, now, la)
+	if len(s.LeveledToday) != 0 || s.LeveledToday == nil {
+		t.Fatalf("nothing levelled yet, want an empty list: %#v", s.LeveledToday)
+	}
+	if s.Pillars[4].Today != 0 || s.Pillars[4].Events7d != 6 {
+		t.Fatalf("competence %+v", s.Pillars[4])
+	}
+
+	l.add("note.added", "note:today", "manual", "2026-10-29", `{}`) // 105 xp: level 2
+	l.add("study.session", "skill:latin", "duet:faith", "2026-10-29", `{"minutes":5}`)
+	l.evs[len(l.evs)-1].Pillar = "faith" // 1 xp, no level
+	s = Build(l.evs, nil, Source{}, now, la)
+	if want := []string{"competence"}; !reflect.DeepEqual(s.LeveledToday, want) {
+		t.Fatalf("leveled_today %v", s.LeveledToday)
+	}
+	if s.Pillars[4].Today != 1 || s.Pillars[6].Pillar != "agents" || s.Pillars[7].Pillar != "faith" || s.Pillars[7].Today != 1 {
+		t.Fatalf("today per pillar: %+v", s.Pillars)
+	}
+	if b, _ := json.Marshal(s.Pillars[4]); !strings.Contains(string(b), `"today":1`) {
+		t.Fatalf("json %s", b)
+	}
+
+	// Already level 2 at dawn: today's xp doesn't level it again.
+	l.add("note.added", "note:more", "manual", "2026-10-29", `{}`)
+	if s = Build(l.evs, nil, Source{}, now, la); len(s.LeveledToday) != 1 {
+		t.Fatalf("still the one level-up: %v", s.LeveledToday)
 	}
 }

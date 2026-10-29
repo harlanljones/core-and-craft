@@ -28,9 +28,13 @@ Item {
   property real gap: 6
   property real tileOpacity: 0.88
 
+  // A widget's screen { } is laid out for a board 8 rows tall; a board with
+  // fewer tiles grows to that while a screen is open, and the tiles stay put.
+  property int screenRows: 8
+
   readonly property real dp: pitch / 69
   implicitWidth: columns * pitch - gap
-  implicitHeight: rowsUsed * pitch - gap
+  implicitHeight: Math.max(rowsUsed, board.screenNode ? board.screenRows : 0) * pitch - gap
 
   FolderListModel {
     id: files
@@ -111,6 +115,8 @@ Item {
       height: tile.place.h * board.pitch - board.gap
       color: widget.alpha(widget.ink("background"), board.tileOpacity)
       clip: true
+      // The other tiles don't show while a screen is open.
+      visible: board.screenNode === null
 
       Connections {
         target: widget

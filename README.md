@@ -62,8 +62,8 @@ internal/monkeytype/  ApeKey client and result mapping
 internal/snapshot/    fold into snapshot.json (gate, sustain, daily series, pillars)
 systemd/              user units: daily pull, Drive inbox pull, rebuild on change
 board/plugin/         Omarchy 4 shell plugin: the board, vendored OWL runtime (owl/)
-board/test/           check.sh renders every widget under node against acta-built snapshots
-widgets/              OWL tiles the board shows (60-typing.owl)
+board/test/           check.sh renders every widget under node against acta-built snapshots; taps.js drives the town's taps
+widgets/              OWL tiles the board shows (10-town.owl, 60-typing.owl)
 docs/                 event envelope, widget contract
 seed/                 Oct 29 events and the first study note, as an inbox file
 ```
