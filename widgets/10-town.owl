@@ -115,7 +115,7 @@ widget "town" {
   let towerOps = flatten(order.map(l => get(tower, indexOf(ids, l.id))))
   let dots = lots2.filter(l => l.id == top).map(l => {"k": "circle", "fill": accent, "r": 5, "pts": [[l.i + 0.45, l.j + 0.8, 0]]})
 
-  // ---------------------------------------------------------------- world, in lot space (g 0: islands and bridge, 1: boats, 2: towers)
+  // ---------------------------------------------------------------- world, in lot space (g 0: islands and bridge, 1: boats, 2: towers, 3: the @ dot)
   let G2 = 1.16
   let isleOps = flatten([
     ["career", "outlook", "relationships", "economic"],
@@ -137,7 +137,7 @@ widget "town" {
   let boatOps = flatten(range(len(props)).map(k => [
     {"g": 1, "k": "poly", "fill": cyan, "pts": [[get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 7 + k * 30, 26], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 29 + k * 30, 26], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 25 + k * 30, 32], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 11 + k * 30, 32]]},
     {"g": 1, "k": "poly", "fill": alpha(cyan, 0.8), "pts": [[get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 18 + k * 30, 11], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 27 + k * 30, 24], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 18 + k * 30, 24]]}]))
-  let world = flatten([isleOps, bridgeOps, boatOps, towerOps.map(d => merge(d, {"g": 2})), dots.map(d => merge(d, {"g": 2}))])
+  let world = flatten([isleOps, bridgeOps, boatOps, towerOps.map(d => merge(d, {"g": 2})), dots.map(d => merge(d, {"g": 3}))])
   // the one place the isometric projection happens
   let proj = world.map(d => merge(d, {"pts": d.pts.map(p => [166 + (p[0] - p[1]) * 58 + (p[3] ?? 0), 214 + (p[0] + p[1]) * 29 - p[2] + (p[4] ?? 0)])}))
 
@@ -187,7 +187,7 @@ widget "town" {
 
   // ---------------------------------------------------------------- the scene, front to back
   let sceneStill = flatten([sky, proj.filter(d => d.g == 0), proj.filter(d => d.g == 2), rain])
-  let sceneFull = flatten([sky, proj.filter(d => d.g == 0), proj.filter(d => d.g == 1), proj.filter(d => d.g == 2), labelOps, rain])
+  let sceneFull = flatten([sky, proj.filter(d => d.g == 0), proj.filter(d => d.g == 1), proj.filter(d => d.g == 2), proj.filter(d => d.g == 3), labelOps, rain])
 
   // The renderer: the same scene whole (still: false) or scaled down for the
   // tile (still: true), without the sailboats and labels.
@@ -215,8 +215,14 @@ widget "town" {
           }
         }
       }
-      let k = still ? min(width / 582, height / 470) : width / 582
-      translate((width - 582 * k) / 2, still ? (height - 470 * k) / 2 : 0) {
+      // The map is 582 x 470 px, scaled to the width. A still frames just the
+      // islands (the sky above them is labels, left out at this size), centred.
+      let vx = still ? 62 : 0
+      let vy = still ? 130 : 0
+      let vw = still ? 520 : 582
+      let vh = still ? 340 : 470
+      let k = still ? min(width / vw, height / vh) : width / vw
+      translate((width - vw * k) / 2 - vx * k, still ? (height - vh * k) / 2 - vy * k : 0) {
         scale(k) {
           for d in (still ? sceneStill : sceneFull) {
             if d.k == "poly" {
@@ -244,16 +250,27 @@ widget "town" {
   let tagged = tags == "" ? [] : ids.filter(id => startsWith(id, lower(tags)))
 
   // ---------------------------------------------------------------- the tile
+  // A still of the two islands from the same renderer, scaled down: no
+  // sailboats or labels, so what is left is the towers, the bridge (lit while
+  // the streak holds) and, beside it, the level numeral.
   onTap: screen()
   Column {
     gap: 4
     fill: true
-    Text { text: "Duae Insulae · two islands"; style: label; font: mono; color: muted }
+    Text { text: "Duae Insulae · two islands"; style: label; font: mono; color: muted; maxLines: 1 }
     Row {
       gap: 8
-      align: bottom
-      Text { text: overall; style: title; font: mono; color: accent }
-      Text { text: "streak ${streak.days ?? 0} · ${dueN} due"; style: small; font: mono; color: foreground }
+      fill: true
+      Isles { still: true; weight: 1; fill: height }
+      Column {
+        width: 92
+        gap: 3
+        Text { text: "Gradus · level"; style: small; font: mono; color: muted; maxLines: 1 }
+        Text { text: overall; style: huge; font: mono; color: accent; maxLines: 1 }
+        Progress { value: xp.into ?? 0; max: xp.need ?? 100; color: accent }
+        Text { text: "${xp.into ?? 0}/${xp.need ?? 100} xp"; style: small; font: mono; color: muted; maxLines: 1 }
+        Text { text: "streak ${streak.days ?? 0}"; style: small; font: mono; color: streak.today == true ? green : foreground; maxLines: 1 }
+      }
     }
   }
 
