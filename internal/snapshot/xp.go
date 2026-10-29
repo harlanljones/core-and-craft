@@ -22,7 +22,6 @@ const (
 	levelGrowth      = 1.5
 	historyDays      = 30
 	streakLookback   = 400
-	importAgent      = "acta-mt"
 	retractedKind    = "event.retracted"
 	restKind         = "day.rested"
 	questDoneKind    = "quest.done"
@@ -53,9 +52,9 @@ func levelOf(total int) Level {
 	}
 }
 
-// Streak counts days in a row with something recorded by hand or an agent
-// (not an import), or a rest day. Today counts once it has one; until then
-// the streak runs through yesterday.
+// Streak counts days in a row with any recorded event (an import from
+// acta-mt counts, as it earns xp) or a rest day. Today counts once it has
+// one; until then the streak runs through yesterday.
 type Streak struct {
 	Days  int  `json:"days"`
 	Today bool `json:"today"`
@@ -159,11 +158,13 @@ func rollUp(gs []xpGain, today time.Time) (Level, map[string]Level, []int) {
 	return levelOf(total), pillars, hist
 }
 
-// streakOf walks back from today over days with a non-import event or a rest.
+// streakOf walks back from today over days with an event or a rest. live has
+// gone through Unshadowed, so a run logged by hand and repeated by an import
+// is one event here, as it is for xp.
 func streakOf(live []event.Event, today time.Time, loc *time.Location) Streak {
 	counted := map[string]bool{}
 	for _, e := range live {
-		if e.Kind == retractedKind || (e.Source.Agent == importAgent && e.Kind != restKind) {
+		if e.Kind == retractedKind {
 			continue
 		}
 		counted[e.LocalDate(loc)] = true

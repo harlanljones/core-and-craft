@@ -74,7 +74,7 @@ Widgets never read `events.jsonl`. They read `$ACTA_STATE/snapshot.json` (defaul
   | rest day | 0 |
 
 - **Levels**: level *n* costs round(100 × 1.5^(n−1)) xp (100, 150, 225, 338, …), overall and per pillar.
-- **`streak`** counts consecutive days with any event that isn't an import, or a `day.rested`. Today joins once it has one; until then the streak runs through yesterday.
+- **`streak`** counts consecutive days with any event, or a `day.rested`. A Monkeytype run pulled by `acta-mt` counts, as it earns xp; a run logged by hand and repeated by an import is one run, so it adds neither a streak day nor xp twice. Today joins once it has one; until then the streak runs through yesterday.
 
 ### Display rules
 
