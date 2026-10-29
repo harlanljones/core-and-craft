@@ -14,7 +14,7 @@
 | `recorded_at` | string | RFC 3339 UTC, when it was logged |
 | `pillar` | string | Full lowercase word: `career outlook relationships economic competence recovery agents faith time`. Never initials (C and R clash). |
 | `kind` | string | See below |
-| `subject` | string | `skill:<slug>`, `note:<slug>` or `card:<slug>`. For `event.retracted`, the target event's id. |
+| `subject` | string | `skill:<slug>`, `note:<slug>`, `card:<slug>`, `quest:<slug>` (every `quest.*` kind) or `checkin:<slug>` (every `checkin.*` kind). For `event.retracted`, the target event's id. For `day.rested`, `day:YYYY-MM-DD`. |
 | `source.via` | string | `chat`, `manual`, `monkeytype-api`, `keybr`, ... |
 | `source.agent` | string | Fixed list: `acta`, `acta-mt`, `claude-code`, `hermes`, `manual`, `duet:<channel>` |
 | `source.ref`, `source.note` | string | Optional |
@@ -41,6 +41,17 @@ body = {"agent": a, "at": at, "data": data, "kind": kind, "recorded_at": rec, "s
 - `note.added` `{path, title, sha256, from_pillar, sessions}`
 - `review.logged` `{card, rating 1..4, duration_ms}`: FSRS input, later phase
 - `event.retracted` `{reason}`
+- `quest.added` `{title, priority? 1..3, every?, skill?, rule?, status?}`: one concrete next action in the event's pillar.
+  - `every`: `once` (default), `daily`, `weekdays`, `weekly:mon,thu`, `every:Nd` (1..365, counted from the day it was added) or `monthly:D` (past a short month's end, its last day).
+  - `rule`: `runs:N` or `minutes:N`, and it needs `skill`. Qualifying evidence for that skill finishes the quest for the day.
+  - `status`: `active` or `proposed`. Only `manual` quests may start `active`. A quest from any other agent is proposed, with or without the field, until `quest.accepted`.
+- `quest.accepted`, `quest.declined` `{reason?}`, `quest.done`, `quest.dropped` `{}`: done on a recurring quest counts for that day. Undo is `event.retracted` on the done event.
+- `quest.snoozed` `{until: YYYY-MM-DD}`: hidden until that day.
+- `quest.edited` `{title?, priority?, every?}`: at least one field. The latest edit wins.
+- `checkin.asked` `{question}` and `checkin.answered` `{text}`: a pillar agent asks, Harlan answers, under the same `checkin:<slug>`.
+- `day.rested` `{}`, subject `day:YYYY-MM-DD`: a rest day keeps the streak.
+
+Xp, levels and scores are never fields on any event. acta computes them in the snapshot.
 
 Latest `skill.protocol_set` and `skill.target_set` per subject win, in `seq` order.
 

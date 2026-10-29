@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/harlanljones/core-and-craft/internal/quest"
 )
 
 const Version = 1
@@ -37,6 +39,16 @@ var Kinds = []string{
 	"note.added",
 	"review.logged",
 	"event.retracted",
+	"quest.added",
+	"quest.accepted",
+	"quest.declined",
+	"quest.done",
+	"quest.snoozed",
+	"quest.dropped",
+	"quest.edited",
+	"checkin.asked",
+	"checkin.answered",
+	"day.rested",
 }
 
 // Agents that may write. duet:<channel> covers the Claude Duet channels.
@@ -70,7 +82,10 @@ var (
 	dayRe     = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 	nativeRe  = regexp.MustCompile(`^evt_[0-9a-f]{16}$`)
 	importRe  = regexp.MustCompile(`^[a-z][a-z0-9]*:[A-Za-z0-9_-]+$`)
-	subjectRe = regexp.MustCompile(`^(skill|note|card):[a-z0-9][a-z0-9-]*$`)
+	subjectRe = regexp.MustCompile(`^(skill|note|card|quest|checkin):[a-z0-9][a-z0-9-]*$`)
+	daySubjRe = regexp.MustCompile(`^day:\d{4}-\d{2}-\d{2}$`)
+	skillRe   = regexp.MustCompile(`^skill:[a-z0-9][a-z0-9-]*$`)
+	ruleRe    = regexp.MustCompile(`^(runs|minutes):([1-9][0-9]{0,3})$`)
 )
 
 func contains(list []string, s string) bool {
@@ -150,12 +165,21 @@ func Validate(e Event, requireSeq bool) error {
 	if !contains(Kinds, e.Kind) {
 		add("kind: unknown %q", e.Kind)
 	}
-	if e.Kind == "event.retracted" {
+	switch {
+	case e.Kind == "event.retracted":
 		if !ValidID(e.Subject) {
 			add("subject: event.retracted needs the target event id, got %q", e.Subject)
 		}
-	} else if !subjectRe.MatchString(e.Subject) {
-		add("subject: want skill:|note:|card:<slug>, got %q", e.Subject)
+	case e.Kind == "day.rested":
+		if !daySubjRe.MatchString(e.Subject) {
+			add("subject: day.rested needs day:YYYY-MM-DD, got %q", e.Subject)
+		}
+	case !subjectRe.MatchString(e.Subject):
+		add("subject: want skill:|note:|card:|quest:|checkin:<slug>, got %q", e.Subject)
+	case strings.HasPrefix(e.Kind, "quest.") && !strings.HasPrefix(e.Subject, "quest:"):
+		add("subject: %s needs quest:<slug>, got %q", e.Kind, e.Subject)
+	case strings.HasPrefix(e.Kind, "checkin.") && !strings.HasPrefix(e.Subject, "checkin:"):
+		add("subject: %s needs checkin:<slug>, got %q", e.Kind, e.Subject)
 	}
 	if e.Source.Via == "" {
 		add("source.via: required")
@@ -166,6 +190,8 @@ func Validate(e Event, requireSeq bool) error {
 	d := bytes.TrimSpace(e.Data)
 	if len(d) == 0 || d[0] != '{' || !json.Valid(d) {
 		add("data: must be a JSON object")
+	} else {
+		errs = append(errs, validateData(e)...)
 	}
 	if e.Supersedes != "" && !ValidID(e.Supersedes) {
 		add("supersedes: %q is not an event id", e.Supersedes)
@@ -227,4 +253,101 @@ func Marshal(e Event) ([]byte, error) {
 		return nil, err
 	}
 	return bytes.TrimRight(buf.Bytes(), "\n"), nil
+}
+
+// validateData checks the data of the kinds whose fields acta relies on.
+// Other kinds only need a JSON object.
+func validateData(e Event) []error {
+	var errs []error
+	add := func(format string, a ...any) { errs = append(errs, fmt.Errorf("data."+format, a...)) }
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(e.Data, &m); err != nil {
+		return []error{fmt.Errorf("data: %v", err)}
+	}
+	str := func(k string) (string, bool) {
+		var v string
+		raw, ok := m[k]
+		if !ok {
+			return "", false
+		}
+		if json.Unmarshal(raw, &v) != nil {
+			add("%s: must be a string", k)
+			return "", false
+		}
+		return v, true
+	}
+	text := func(k string, max int) {
+		v, ok := str(k)
+		if !ok || strings.TrimSpace(v) == "" {
+			add("%s: required", k)
+		} else if len(v) > max {
+			add("%s: longer than %d bytes", k, max)
+		}
+	}
+	priority := func() {
+		raw, ok := m["priority"]
+		if !ok {
+			return
+		}
+		var p int
+		if json.Unmarshal(raw, &p) != nil || p < 1 || p > 3 {
+			add("priority: want 1, 2 or 3, got %s", raw)
+		}
+	}
+	every := func() {
+		if v, ok := str("every"); ok {
+			if _, err := quest.Parse(v); err != nil {
+				add("%v", err)
+			}
+		}
+	}
+
+	switch e.Kind {
+	case "quest.added":
+		text("title", 200)
+		priority()
+		every()
+		skill, hasSkill := str("skill")
+		if hasSkill && !skillRe.MatchString(skill) {
+			add("skill: want skill:<slug>, got %q", skill)
+		}
+		if rule, ok := str("rule"); ok {
+			if !hasSkill {
+				add("rule: needs a skill")
+			}
+			if !ruleRe.MatchString(rule) {
+				add("rule: want runs:N or minutes:N, got %q", rule)
+			}
+		}
+		if status, ok := str("status"); ok {
+			switch {
+			case status != "active" && status != "proposed":
+				add("status: want active or proposed, got %q", status)
+			case status == "active" && e.Source.Agent != "manual":
+				// Only Harlan's own quests start active; agents propose.
+				add("status: only manual quests start active; %s proposes", e.Source.Agent)
+			}
+		}
+	case "quest.snoozed":
+		if v, _ := str("until"); !dayRe.MatchString(v) {
+			add("until: want YYYY-MM-DD, got %q", v)
+		}
+	case "quest.edited":
+		_, t := m["title"]
+		_, p := m["priority"]
+		_, ev := m["every"]
+		if !t && !p && !ev {
+			add("edited: change at least one of title, priority, every")
+		}
+		if t {
+			text("title", 200)
+		}
+		priority()
+		every()
+	case "checkin.asked":
+		text("question", 300)
+	case "checkin.answered":
+		text("text", 2000)
+	}
+	return errs
 }
