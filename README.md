@@ -43,6 +43,12 @@ Create the ApeKey in Monkeytype's account settings and enable it. The key is rea
 | `acta snapshot` | rebuild `snapshot.json` |
 | `acta status [--json]` | one line for a bar widget |
 | `acta doctor` | duplicate ids, seq gaps, future times, dangling corrections |
+| `acta quest add --pillar P --title T [--priority N] [--every R] [--skill S --rule R]` | add a quest (active from you, proposed from any other `--agent`) |
+| `acta quest done\|undo\|accept\|decline\|drop <id>` | finish (undo retracts the latest done), approve or turn down a proposal, drop |
+| `acta quest snooze <id> --until D`, `acta quest edit <id> ...` | hide until a day; change title, priority or recurrence |
+| `acta quest list [--json] [--all]` | open and proposed quests (`--all` adds done, declined, dropped) |
+| `acta checkin ask --pillar P --question Q`, `acta checkin answer <id> --text T` | a pillar's open question and your answer |
+| `acta rest [--at D]` | a rest day, which keeps the streak |
 
 Environment: `ACTA_DATA` (default `~/core-and-craft`), `ACTA_STATE` (default `~/.local/state/core-and-craft`), `ACTA_TZ` (default local).
 

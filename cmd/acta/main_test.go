@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/harlanljones/core-and-craft/internal/snapshot"
+	"github.com/harlanljones/core-and-craft/internal/store"
 )
 
 const key = "ape-SECRET-for-tests"
@@ -254,5 +255,129 @@ func TestMtPullOfScreenshotRunCountsOnce(t *testing.T) {
 	sk := s.Skills[0]
 	if sk.RunsTotal != 5 || sk.RunsQualifying != 2 || s.Today.TypingTests != 5 || *sk.Best != 88.2 {
 		t.Fatalf("total %d qualifying %d today %d best %v", sk.RunsTotal, sk.RunsQualifying, s.Today.TypingTests, *sk.Best)
+	}
+}
+
+func runOut(t *testing.T, e env, args ...string) string {
+	t.Helper()
+	out := e.stdout.(*bytes.Buffer)
+	out.Reset()
+	mustRun(t, e, args...)
+	return strings.TrimSpace(out.String())
+}
+
+func listQuests(t *testing.T, e env) map[string]snapshot.Quest {
+	t.Helper()
+	var qs []snapshot.Quest
+	if err := json.Unmarshal([]byte(runOut(t, e, "quest", "list", "--json", "--all")), &qs); err != nil {
+		t.Fatal(err)
+	}
+	m := map[string]snapshot.Quest{}
+	for _, q := range qs {
+		m[q.ID] = q
+	}
+	return m
+}
+
+// questID pulls the quest:<slug> id from "quest:<slug> added (...)".
+func questID(t *testing.T, out string) string {
+	t.Helper()
+	id, _, _ := strings.Cut(out, " ")
+	if !strings.HasPrefix(id, "quest:") {
+		t.Fatalf("no quest id in %q", out)
+	}
+	return id
+}
+
+func TestQuestLifecycle(t *testing.T) {
+	e, _, _ := testEnv(t, nil)
+	mustRun(t, e, "init")
+
+	mine := questID(t, runOut(t, e, "quest", "add", "--pillar", "relationships", "--title", "Call Mom!", "--priority", "1"))
+	if !strings.HasPrefix(mine, "quest:call-mom-") {
+		t.Fatalf("slug %s", mine)
+	}
+	agent := questID(t, runOut(t, e, "quest", "add", "--pillar", "economic", "--title", "Review October spend", "--agent", "duet:economic", "--via", "chat"))
+	daily := questID(t, runOut(t, e, "quest", "add", "--pillar", "competence", "--title", "Typing drill", "--every", "daily", "--skill", "skill:typing", "--rule", "runs:1"))
+
+	qs := listQuests(t, e)
+	if qs[mine].Status != "active" || qs[mine].Priority != 1 || qs[agent].Status != "proposed" || qs[daily].Every != "daily" {
+		t.Fatalf("after add: %+v", qs)
+	}
+
+	// Short ids work; done on a proposal is refused.
+	short := strings.TrimPrefix(agent, "quest:")
+	if code := run(e, []string{"quest", "done", short}); code == 0 {
+		t.Fatal("done on a proposed quest should fail")
+	}
+	if code := run(e, []string{"quest", "accept", short, "--agent", "duet:economic"}); code == 0 {
+		t.Fatal("an agent must not accept a proposal")
+	}
+	mustRun(t, e, "quest", "accept", short)
+	mustRun(t, e, "quest", "done", mine)
+	mustRun(t, e, "quest", "done", daily)
+	qs = listQuests(t, e)
+	if qs[agent].Status != "active" || qs[mine].Status != "done" || qs[daily].LastDone != "2026-10-29" {
+		t.Fatalf("after done: %+v", qs)
+	}
+
+	mustRun(t, e, "quest", "undo", mine)
+	if q := listQuests(t, e)[mine]; q.Status != "active" || q.LastDone != "" {
+		t.Fatalf("after undo: %+v", q)
+	}
+	if code := run(e, []string{"quest", "undo", mine}); code == 0 {
+		t.Fatal("undo with nothing done should fail")
+	}
+
+	mustRun(t, e, "quest", "edit", daily, "--priority", "3", "--every", "weekdays")
+	mustRun(t, e, "quest", "snooze", agent, "--until", "2026-11-02")
+	mustRun(t, e, "quest", "drop", mine)
+	qs = listQuests(t, e)
+	if qs[daily].Priority != 3 || qs[daily].Every != "weekdays" || qs[agent].SnoozedUntil != "2026-11-02" || qs[mine].Status != "dropped" {
+		t.Fatalf("after edit/snooze/drop: %+v", qs)
+	}
+	if code := run(e, []string{"quest", "snooze", daily, "--until", "soon"}); code == 0 {
+		t.Fatal("bad until should fail")
+	}
+	if code := run(e, []string{"quest", "done", "quest:nope"}); code == 0 {
+		t.Fatal("unknown quest should fail")
+	}
+
+	// The default list hides dropped and declined quests.
+	out := runOut(t, e, "quest", "list")
+	if strings.Contains(out, "Call Mom") || !strings.Contains(out, "Typing drill") {
+		t.Fatalf("list %q", out)
+	}
+	out = runOut(t, e, "doctor")
+	if !strings.Contains(out, "ok") {
+		t.Fatalf("doctor %q", out)
+	}
+}
+
+func TestCheckinAndRest(t *testing.T) {
+	e, _, _ := testEnv(t, nil)
+	mustRun(t, e, "init")
+	out := runOut(t, e, "checkin", "ask", "--pillar", "recovery", "--question", "What's your target sleep window?", "--agent", "duet:recovery")
+	id, _, _ := strings.Cut(out, " ")
+	if !strings.HasPrefix(id, "checkin:") {
+		t.Fatalf("ask %q", out)
+	}
+	mustRun(t, e, "checkin", "answer", id, "--text", "22:30 to 06:30")
+	if code := run(e, []string{"checkin", "answer", "checkin:nope", "--text", "x"}); code == 0 {
+		t.Fatal("answer to an unknown check-in should fail")
+	}
+	if code := run(e, []string{"checkin", "answer", id}); code == 0 {
+		t.Fatal("answer needs text")
+	}
+	mustRun(t, e, "rest")
+	if out := runOut(t, e, "rest"); !strings.Contains(out, "already") {
+		t.Fatalf("second rest %q", out)
+	}
+	evs, bad, _ := store.ReadFile(e.logPath())
+	if len(bad) != 0 || len(evs) != 3 {
+		t.Fatalf("want 3 events, got %d (bad %v)", len(evs), bad)
+	}
+	if evs[1].Pillar != "recovery" || evs[1].Source.Agent != "manual" || evs[2].Subject != "day:2026-10-29" {
+		t.Fatalf("events %+v", evs)
 	}
 }
