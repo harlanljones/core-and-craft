@@ -64,6 +64,10 @@ type Skill struct {
 type Pillar struct {
 	Pillar   string `json:"pillar"`
 	Events7d int    `json:"events_7d"`
+	XP       int    `json:"xp"`
+	Level    int    `json:"level"`
+	Into     int    `json:"into"`
+	Need     int    `json:"need"`
 }
 
 type Today struct {
@@ -81,6 +85,13 @@ type Snapshot struct {
 	Today   Today             `json:"today"`
 	Pillars []Pillar          `json:"pillars"`
 	Errors  []store.LineError `json:"errors"`
+
+	Quests   []QuestView `json:"quests"`
+	Proposed []Proposal  `json:"proposed"`
+	Checkins []Checkin   `json:"checkins"`
+	XP       Level       `json:"xp"`
+	Streak   Streak      `json:"streak"`
+	History  []int       `json:"history"`
 }
 
 // Effective drops retracted events and events superseded by a live one.
@@ -285,6 +296,7 @@ func Build(evs []event.Event, bad []store.LineError, src Source, now time.Time, 
 		snap.Pillars = append(snap.Pillars, Pillar{Pillar: p, Events7d: pillarCount[p]})
 	}
 
+	runsByDay := map[string]map[string]int{}
 	for _, id := range order {
 		d := defs[id]
 		if d.def == nil {
@@ -349,6 +361,7 @@ func Build(evs []event.Event, bad []store.LineError, src Source, now time.Time, 
 			qual = append(qual, run{ev: e, t: t, wpm: wpm})
 		}
 		sk.RunsQualifying = len(qual)
+		runsByDay[id] = map[string]int{}
 
 		byDay := map[string]*Day{}
 		for _, r := range qual {
@@ -362,6 +375,7 @@ func Build(evs []event.Event, bad []store.LineError, src Source, now time.Time, 
 				byDay[date] = dd
 			}
 			dd.Runs++
+			runsByDay[id][date]++
 			if dd.Best == nil || r.wpm > *dd.Best {
 				dd.Best = round1(r.wpm)
 			}
@@ -398,6 +412,41 @@ func Build(evs []event.Event, bad []store.LineError, src Source, now time.Time, 
 		}
 		snap.Skills = append(snap.Skills, sk)
 	}
+
+	// The game: quests ranked by the engine, check-ins, xp, levels, streak.
+	todayT := time.Date(now.In(loc).Year(), now.In(loc).Month(), now.In(loc).Day(), 0, 0, 0, 0, loc)
+	qs := Quests(live, loc)
+	skillByID := map[string]Skill{}
+	for _, sk := range snap.Skills {
+		skillByID[sk.ID] = sk
+	}
+	minutes := map[string]map[string]float64{}
+	for _, e := range live {
+		if e.Kind != studySessionKind {
+			continue
+		}
+		if f, ok := num(decode(e.Data)["minutes"]); ok {
+			if minutes[e.Subject] == nil {
+				minutes[e.Subject] = map[string]float64{}
+			}
+			minutes[e.Subject][e.LocalDate(loc)] += f
+		}
+	}
+	snap.Quests, snap.Proposed = rank(qs, engineInputs{
+		today: todayT, quiet: pillarCount, skills: skillByID, runs: runsByDay, minutes: minutes, timeZone: loc,
+	})
+	snap.Checkins = checkins(live, todayT, loc)
+	questByID := map[string]Quest{}
+	for _, q := range qs {
+		questByID[q.ID] = q
+	}
+	var perPillar map[string]Level
+	snap.XP, perPillar, snap.History = rollUp(gains(live, xpInputs{runsByDay: runsByDay, skills: snap.Skills, quests: questByID}, loc), todayT)
+	for i := range snap.Pillars {
+		l := perPillar[snap.Pillars[i].Pillar]
+		snap.Pillars[i].XP, snap.Pillars[i].Level, snap.Pillars[i].Into, snap.Pillars[i].Need = l.Total, l.Level, l.Into, l.Need
+	}
+	snap.Streak = streakOf(live, todayT, loc)
 	return snap
 }
 
