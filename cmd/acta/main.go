@@ -91,7 +91,7 @@ func main() {
 }
 
 const usage = `usage: acta <command>
-  init | mt pull [--all] | log <kind> | retract <id> | ingest [file...] | snapshot | status [--json] | doctor | version
+  init | mt pull [--all] | log <kind> | retract <id> | ingest [file...] | snapshot | status [--json] | notify [--all] | doctor | version
   quest add|done|undo|accept|decline|drop|snooze|edit|list | checkin ask|answer | rest`
 
 func run(e env, args []string) int {
@@ -125,6 +125,8 @@ func run(e env, args []string) int {
 		err = cmdSnapshot(e)
 	case "status":
 		err = cmdStatus(e, args[1:])
+	case "notify":
+		err = cmdNotify(e, args[1:])
 	case "doctor":
 		err = cmdDoctor(e)
 	case "version":

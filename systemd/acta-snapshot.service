@@ -4,4 +4,7 @@ Description=CORE & CRAFT: rebuild snapshot.json
 [Service]
 Type=oneshot
 Environment=ACTA_DATA=%h/core-and-craft ACTA_STATE=%h/.local/state/core-and-craft
+Environment=ACTA_NOTIFY_CMD=/usr/share/omarchy/bin/omarchy-notification-send
 ExecStart=%h/.local/bin/acta snapshot
+# The leading '-' keeps a notify failure from failing the snapshot unit.
+ExecStartPost=-%h/.local/bin/acta notify
