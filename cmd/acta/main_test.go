@@ -530,6 +530,49 @@ func TestDoctorRejectedInbox(t *testing.T) {
 	}
 }
 
+func TestDoctorServiceAccount(t *testing.T) {
+	key := func(mode os.FileMode) string {
+		p := filepath.Join(t.TempDir(), "sa.json")
+		if err := os.WriteFile(p, []byte(`{"private_key":"SECRET"}`), mode); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(p, mode); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	cases := []struct {
+		name, conf, want string
+		warn             bool
+	}{
+		{"private key file", "[ccinbox]\ntype = drive\nservice_account_file = " + key(0o600) + "\n", "rclone: ok, remote ccinbox uses a service account", false},
+		{"key readable by others", "[ccinbox]\ntype = drive\nservice_account_file = " + key(0o644) + "\n", "warn: rclone: service account key", true},
+		{"key file missing", "[ccinbox]\ntype = drive\nservice_account_file = /nonexistent/sa.json\n", "warn: rclone: remote ccinbox service account file /nonexistent/sa.json", true},
+		{"inline credentials", "[ccinbox]\ntype = drive\nservice_account_credentials = {\"private_key\":\"SECRET\"}\n", "rclone: ok, remote ccinbox uses a service account", false},
+		{"service account beats a stale shared client", "[ccinbox]\ntype = drive\nservice_account_file = " + key(0o600) + "\ntoken = {\"access_token\":\"SECRET\"}\n", "rclone: ok, remote ccinbox uses a service account", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e, out, _ := testEnv(t, nil)
+			e.command = fakeCommands(t, map[string]string{"rclone": rcloneConf(t, c.conf)}, nil)
+			mustRun(t, e, "doctor")
+			got := out.String()
+			if !strings.Contains(got, c.want) {
+				t.Fatalf("doctor %q, want %q", got, c.want)
+			}
+			if strings.Contains(got, "SECRET") {
+				t.Fatalf("doctor printed a secret: %q", got)
+			}
+			if strings.Contains(got, "shared Google Drive client_id") {
+				t.Fatalf("doctor %q warns about client_id for a service account", got)
+			}
+			if !c.warn && strings.Contains(got, "rclone: warn") {
+				t.Fatalf("doctor %q should not warn about rclone", got)
+			}
+		})
+	}
+}
+
 func TestDoctorClientID(t *testing.T) {
 	cases := []struct {
 		name string
@@ -592,6 +635,7 @@ func TestDoctorInboxPull(t *testing.T) {
 		{"failed", "LoadState=loaded\nResult=exit-code\nExecMainExitTimestamp=" + unix(time.Minute) + "\n", nil, "warn: inbox pull: acta-inbox.service last run failed (Result=exit-code)"},
 		{"old", "LoadState=loaded\nResult=success\nExecMainExitTimestamp=" + unix(2*time.Hour) + "\n", nil, "warn: inbox pull: last run 2h0m0s ago"},
 		{"never ran", "LoadState=loaded\nResult=success\nExecMainExitTimestamp=\n", nil, "warn: inbox pull: acta-inbox.service has not run yet"},
+		{"running now", "LoadState=loaded\nActiveState=activating\nResult=success\nExecMainExitTimestamp=\n", nil, "inbox pull: running now"},
 		{"not installed", "LoadState=not-found\nResult=success\nExecMainExitTimestamp=\n", nil, "inbox pull: not configured (acta-inbox.service is not-found)"},
 	}
 	for _, c := range cases {
