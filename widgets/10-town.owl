@@ -98,7 +98,9 @@ widget "town" {
     // the tower: left face muted, right face muted at 0.55, top surface
     [{"k": "poly", "fill": muted, "pts": [[l.fi, l.fn, 0], [l.fe, l.fn, 0], [l.fe, l.fn, l.hgt], [l.fi, l.fn, l.hgt]]},
      {"k": "poly", "fill": alpha(muted, 0.55), "pts": [[l.fe, l.fn, 0], [l.fe, l.fj, 0], [l.fe, l.fj, l.hgt], [l.fe, l.fn, l.hgt]]},
-     {"k": "poly", "fill": surface, "stroke": muted, "w": 1, "pts": [[l.fi, l.fn, l.hgt], [l.fe, l.fn, l.hgt], [l.fe, l.fj, l.hgt], [l.fi, l.fj, l.hgt]]}],
+     {"k": "poly", "fill": surface, "stroke": muted, "w": 1, "pts": [[l.fi, l.fn, l.hgt], [l.fe, l.fn, l.hgt], [l.fe, l.fj, l.hgt], [l.fi, l.fj, l.hgt]]},
+     {"k": "poly", "fill": alpha(foreground, 0.12), "pts": [[l.fi, l.fn, l.hgt], [l.fe, l.fn, l.hgt], [l.fe, l.fj, l.hgt], [l.fi, l.fj, l.hgt]]},
+     {"k": "line", "stroke": alpha(foreground, 0.4), "w": 1.3, "pts": [[l.fe, l.fn, 0], [l.fe, l.fn, l.hgt]]}],
     // a warm glow behind each lit window
     flatten(range(l.storeys).map(sx => range(2).filter(w => sx * 2 + w < l.today).map(w => {"k": "poly", "fill": alpha(yellow, 0.22),
       "pts": [[l.fi + (l.fe - l.fi) * (w == 0 ? 0.3 : 0.7), l.fn, 9 + sx * 14, -5.5, -2.5], [l.fi + (l.fe - l.fi) * (w == 0 ? 0.3 : 0.7), l.fn, 9 + sx * 14, 5.5, 2.5],
@@ -138,6 +140,13 @@ widget "town" {
     // ...then the grown diamonds
     group.map(id => {"g": 0, "k": "poly", "fill": surface, "stroke": alpha(foreground, 0.16), "w": 1, "pts": [[get(spot, id)[0] * G - 0.16, get(spot, id)[1] * G - 0.16, 0], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G - 0.16, 0], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G + G2, 0], [get(spot, id)[0] * G - 0.16, get(spot, id)[1] * G + G2, 0]]})
   ])))
+  // shallows: two wide, faint rings of lighter water at the cliff foot (g 4: the full map only, the tile would clip them)
+  let shallowOps = flatten([0.5, 0.22].map(e => ["career", "outlook", "relationships", "economic", "competence", "recovery", "agents", "faith", "time"].map(id => {"g": 4, "k": "poly", "fill": alpha(blue, e > 0.3 ? 0.07 : 0.11),
+    "pts": [[get(spot, id)[0] * G - 0.16 - e, get(spot, id)[1] * G - 0.16 - e, -14], [get(spot, id)[0] * G + G2 + e, get(spot, id)[1] * G - 0.16 - e, -14],
+            [get(spot, id)[0] * G + G2 + e, get(spot, id)[1] * G + G2 + e, -14], [get(spot, id)[0] * G - 0.16 - e, get(spot, id)[1] * G + G2 + e, -14]]})))
+  // foam where the front cliffs meet the water
+  let foamOps = flatten(["career", "outlook", "relationships", "economic", "competence", "recovery", "agents", "faith", "time"].map(id => [
+    {"g": 0, "k": "line", "stroke": alpha(foreground, 0.3), "w": 2.4, "pts": [[get(spot, id)[0] * G - 0.16, get(spot, id)[1] * G + G2, -14], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G + G2, -14], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G - 0.16, -14]]}]))
   // the bridge is yellow while today is kept, muted otherwise, with 5 planks
   let bridgeOps = flatten([
     [{"g": 0, "k": "poly", "fill": alpha(streak.today == true ? yellow : muted, 0.85), "pts": [[b0, oj + 0.38, 0], [b1, aj + 0.38, 0], [b1, aj + 0.62, 0], [b0, oj + 0.62, 0]]}],
@@ -148,7 +157,7 @@ widget "town" {
   let boatOps = flatten(range(len(props)).map(k => [
     {"g": 1, "k": "poly", "fill": cyan, "pts": [[get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 7 + k * 30, 26], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 29 + k * 30, 26], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 25 + k * 30, 32], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 11 + k * 30, 32]]},
     {"g": 1, "k": "poly", "fill": alpha(cyan, 0.8), "pts": [[get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 18 + k * 30, 11], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 27 + k * 30, 24], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 18 + k * 30, 24]]}]))
-  let world = flatten([isleOps, bridgeOps, boatOps, towerOps.map(d => merge(d, {"g": 2})), dots.map(d => merge(d, {"g": 3}))])
+  let world = flatten([shallowOps, foamOps, isleOps, bridgeOps, boatOps, towerOps.map(d => merge(d, {"g": 2})), dots.map(d => merge(d, {"g": 3}))])
   // the one place the isometric projection happens
   let proj = world.map(d => merge(d, {"pts": d.pts.map(p => [166 + (p[0] - p[1]) * 58 + (p[3] ?? 0), 214 + (p[0] + p[1]) * 29 - p[2] + (p[4] ?? 0)])}))
 
@@ -198,7 +207,7 @@ widget "town" {
 
   // ---------------------------------------------------------------- the scene, front to back
   let sceneStill = flatten([sky, proj.filter(d => d.g == 0), proj.filter(d => d.g == 2), rain])
-  let sceneFull = flatten([sky, proj.filter(d => d.g == 0), proj.filter(d => d.g == 1), proj.filter(d => d.g == 2), proj.filter(d => d.g == 3), labelOps, rain])
+  let sceneFull = flatten([sky, proj.filter(d => d.g == 4), proj.filter(d => d.g == 0), proj.filter(d => d.g == 1), proj.filter(d => d.g == 2), proj.filter(d => d.g == 3), labelOps, rain])
 
   // The renderer: the same scene whole (still: false) or scaled down for the
   // tile (still: true), without the sailboats and labels.
