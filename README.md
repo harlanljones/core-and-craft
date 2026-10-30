@@ -23,6 +23,14 @@ acta mt pull --all                               # one-time backfill
 make install-units                               # daily 23:30 pull, rebuild on change, desktop notifications (first `acta notify` run only records a baseline)
 ```
 
+Duet relay (the board reaching the pillar agents; per pillar, see `docs/duet-relay.md`):
+
+```sh
+install -Dm600 /dev/null ~/.config/core-and-craft/relay.env
+$EDITOR ~/.config/core-and-craft/relay.env       # ACTA_RELAY_<PILLAR>=<fire URL>, ACTA_RELAY_<PILLAR>_TOKEN=...
+acta relay --dry-run                             # what each pillar is waiting for
+```
+
 Board (Omarchy 4):
 
 ```sh
@@ -51,8 +59,10 @@ Create the ApeKey in Monkeytype's account settings and enable it. The key is rea
 | `acta quest list [--json] [--all]` | open and proposed quests (`--all` adds done, declined, dropped) |
 | `acta checkin ask --pillar P --question Q`, `acta checkin answer <id> --text T` | a pillar's open question and your answer |
 | `acta rest [--at D]` | a rest day, which keeps the streak |
+| `acta ask --pillar P --text T` | a question for a pillar's Duet agent (`pillar.asked`) |
+| `acta relay [--dry-run]` | send Harlan's asks, check-in answers and quest decisions to the Duet agents waiting on them |
 
-Environment: `ACTA_DATA` (default `~/core-and-craft`), `ACTA_STATE` (default `~/.local/state/core-and-craft`), `ACTA_TZ` (default local), `ACTA_NOTIFY_CMD` (default `omarchy-notification-send`).
+Environment: `ACTA_DATA` (default `~/core-and-craft`), `ACTA_STATE` (default `~/.local/state/core-and-craft`), `ACTA_TZ` (default local), `ACTA_NOTIFY_CMD` (default `omarchy-notification-send`), `ACTA_RELAY_<PILLAR>` and `ACTA_RELAY_<PILLAR>_TOKEN` (a pillar routine's fire URL and token).
 
 ## Layout
 
@@ -62,11 +72,12 @@ internal/event/       v1 envelope, validation, ids
 internal/store/       flock append, scanning
 internal/monkeytype/  ApeKey client and result mapping
 internal/snapshot/    fold into snapshot.json (gate, sustain, daily series, pillars)
-systemd/              user units: daily pull, Drive inbox pull, rebuild on change, evening notify
+internal/relay/       what goes to which Duet agent, the routine fire client, relay.json
+systemd/              user units: daily pull, Drive inbox pull, rebuild on change, evening notify, relay to Duet
 board/plugin/         Omarchy 4 shell plugin: the board, vendored OWL runtime (owl/)
 board/test/           check.sh renders every widget under node against acta-built snapshots; taps.js drives the town's taps
 widgets/              OWL tiles the board shows (10-town.owl, 60-typing.owl)
-docs/                 event envelope, widget contract
+docs/                 event envelope, widget contract, Duet relay, decisions
 seed/                 Oct 29 events and the first study note, as an inbox file
 ```
 

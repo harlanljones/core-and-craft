@@ -183,3 +183,48 @@ func TestQuestAndCheckinKindsRejected(t *testing.T) {
 		})
 	}
 }
+
+func TestPillarAskKinds(t *testing.T) {
+	asked := func() Event {
+		e := questEvent()
+		e.Kind, e.Subject, e.Data = "pillar.asked", "ask:sleep-1a2b", json.RawMessage(`{"text":"What should I cut this week?"}`)
+		e.Source.Agent = "manual"
+		return e
+	}
+	answered := func() Event {
+		e := asked()
+		e.Kind, e.Data = "pillar.answered", json.RawMessage(`{"text":"The Thursday sync."}`)
+		e.Source.Agent = "duet:competence"
+		return e
+	}
+	for name, e := range map[string]Event{"asked": asked(), "answered": answered()} {
+		if err := Validate(e, true); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	bad := map[string]func() Event{
+		"agent asks":     func() Event { e := asked(); e.Source.Agent = "duet:time"; return e },
+		"manual answers": func() Event { e := answered(); e.Source.Agent = "manual"; return e },
+		"ask no text":    func() Event { e := asked(); e.Data = json.RawMessage(`{"text":" "}`); return e },
+		"ask too long": func() Event {
+			e := asked()
+			e.Data = json.RawMessage(`{"text":"` + strings.Repeat("x", 2001) + `"}`)
+			return e
+		},
+		"ask on checkin": func() Event { e := asked(); e.Subject = "checkin:x"; return e },
+		"checkin on ask": func() Event {
+			e := asked()
+			e.Kind, e.Data = "checkin.asked", json.RawMessage(`{"question":"?"}`)
+			return e
+		},
+		"answer bad slug": func() Event { e := answered(); e.Subject = "ask:"; return e },
+		// A channel answers only for its own pillar.
+		"answer from another channel": func() Event { e := answered(); e.Source.Agent = "duet:time"; return e },
+		"answer for another pillar":   func() Event { e := answered(); e.Pillar = "economic"; return e },
+	}
+	for name, mk := range bad {
+		if Validate(mk(), true) == nil {
+			t.Errorf("%s: want error", name)
+		}
+	}
+}

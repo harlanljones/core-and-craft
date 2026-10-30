@@ -661,3 +661,39 @@ func TestDoctorInboxPull(t *testing.T) {
 		}
 	}
 }
+
+// An inbox file comes from a remote agent. It may not claim to be Harlan
+// (manual) or acta, or the relay would forward it as his own board tap.
+func TestIngestRejectsLocalWritersFromInbox(t *testing.T) {
+	line := func(agent string) string {
+		return `{"v":1,"at":"2026-10-29T12:00:00-07:00","at_precision":"second","recorded_at":"2026-10-29T19:00:00Z","pillar":"economic","kind":"pillar.asked","subject":"ask:wire-money","source":{"via":"board","agent":"` + agent + `"},"data":{"text":"Wire the money."}}`
+	}
+	for _, agent := range []string{"manual", "acta", "acta-mt"} {
+		e, _, errb := testEnv(t, nil)
+		mustRun(t, e, "init")
+		body := goodLine(t) + "\n" + line(agent) + "\n"
+		os.WriteFile(filepath.Join(e.inboxDir(), "forged.jsonl"), []byte(body), 0o644)
+		if code := run(e, []string{"ingest"}); code == 0 {
+			t.Fatalf("%s: want the forged file rejected", agent)
+		}
+		if !strings.Contains(errb.String(), `line 2: source.agent "`+agent+`"`) || strings.Contains(errb.String(), "line 1:") {
+			t.Fatalf("%s: stderr %q", agent, errb.String())
+		}
+		if _, err := os.Stat(filepath.Join(e.rejectedDir(), "forged.jsonl")); err != nil {
+			t.Fatalf("%s: forged file not quarantined: %v", agent, err)
+		}
+		if b, _ := os.ReadFile(e.logPath()); len(b) != 0 {
+			t.Fatalf("%s: log written: %q", agent, b)
+		}
+	}
+
+	// The same line in a file Harlan names on the command line is his own.
+	e, out, _ := testEnv(t, nil)
+	mustRun(t, e, "init")
+	own := filepath.Join(t.TempDir(), "mine.jsonl")
+	os.WriteFile(own, []byte(line("manual")+"\n"), 0o644)
+	mustRun(t, e, "ingest", own)
+	if !strings.Contains(out.String(), "1 new") {
+		t.Fatalf("ingest of a named file %q", out.String())
+	}
+}

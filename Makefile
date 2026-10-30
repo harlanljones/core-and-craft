@@ -21,10 +21,10 @@ install: build
 install-units:
 	install -Dm644 -t $(UNITDIR) systemd/*
 	systemctl --user daemon-reload
-	systemctl --user enable --now acta-mt.timer acta-inbox.timer acta-snapshot.path acta-notify.timer
+	systemctl --user enable --now acta-mt.timer acta-inbox.timer acta-snapshot.path acta-notify.timer acta-relay.path acta-relay.timer
 
 uninstall-units:
-	-systemctl --user disable --now acta-mt.timer acta-inbox.timer acta-snapshot.path acta-notify.timer
+	-systemctl --user disable --now acta-mt.timer acta-inbox.timer acta-snapshot.path acta-notify.timer acta-relay.path acta-relay.timer
 	cd systemd && for u in *; do rm -f $(UNITDIR)/$$u; done
 	systemctl --user daemon-reload
 

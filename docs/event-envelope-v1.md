@@ -14,9 +14,9 @@
 | `recorded_at` | string | RFC 3339 UTC, when it was logged |
 | `pillar` | string | Full lowercase word: `career outlook relationships economic competence recovery agents faith time`. Never initials (C and R clash). |
 | `kind` | string | See below |
-| `subject` | string | `skill:<slug>`, `note:<slug>`, `card:<slug>`, `quest:<slug>` (every `quest.*` kind) or `checkin:<slug>` (every `checkin.*` kind). For `event.retracted`, the target event's id. For `day.rested`, `day:YYYY-MM-DD`. |
+| `subject` | string | `skill:<slug>`, `note:<slug>`, `card:<slug>`, `quest:<slug>` (every `quest.*` kind), `checkin:<slug>` (every `checkin.*` kind) or `ask:<slug>` (every `pillar.*` kind). For `event.retracted`, the target event's id. For `day.rested`, `day:YYYY-MM-DD`. |
 | `source.via` | string | `chat`, `manual`, `monkeytype-api`, `keybr`, ... |
-| `source.agent` | string | Fixed list: `acta`, `acta-mt`, `claude-code`, `hermes`, `manual`, `duet:<channel>` |
+| `source.agent` | string | Fixed list: `acta`, `acta-mt`, `claude-code`, `hermes`, `manual`, `duet:<channel>`. `acta`, `acta-mt` and `manual` write only on this machine; an inbox file may not claim them (see below). |
 | `source.ref`, `source.note` | string | Optional |
 | `data` | object | Kind-specific |
 | `supersedes` | string | Optional: id of the event this one corrects |
@@ -49,6 +49,7 @@ body = {"agent": a, "at": at, "data": data, "kind": kind, "recorded_at": rec, "s
 - `quest.snoozed` `{until: YYYY-MM-DD}`: hidden until that day.
 - `quest.edited` `{title?, priority?, every?}`: at least one field. The latest edit wins.
 - `checkin.asked` `{question}` and `checkin.answered` `{text}`: a pillar agent asks, Harlan answers, under the same `checkin:<slug>`.
+- `pillar.asked` `{text}` and `pillar.answered` `{text}`: the other way round from a check-in. Harlan asks a pillar's Duet agent (only `manual` writes `pillar.asked`), `acta relay` sends it, and the agent answers under the same `ask:<slug>` (only the pillar's own channel writes `pillar.answered`: its `source.agent` must be `duet:<pillar>` for the event's `pillar`, and the snapshot ignores an answer filed under a pillar other than the ask's). Text is at most 2,000 bytes. Neither earns xp.
 - `day.rested` `{}`, subject `day:YYYY-MM-DD`: a rest day keeps the streak.
 
 Xp, levels and scores are never fields on any event. acta computes them in the snapshot.
@@ -61,7 +62,7 @@ Append `event.retracted` (`acta retract <id>`) or a new event with `supersedes`.
 
 ## Remote writers: the inbox
 
-Cloud agents (Claude Duet channels) can't take the lock. They write whole files to `$ACTA_DATA/inbox/<recorded_at>-<agent>.jsonl`: one event per line, `seq` omitted, `id` optional (computed if missing). `acta ingest` validates each file; any bad line rejects the whole file. A rejected file moves to `$ACTA_DATA/inbox/rejected/<name>`, with `<name>.err` next to it holding the file name and each `line N: ...` error; if that name is taken, acta adds a suffix (`<base>-1.jsonl`, `<base>-2.jsonl`, ...) and never overwrites or deletes. The `*.jsonl` glob does not enter `rejected/`, so a rejected file is not retried. To retry, fix the file and move it back to `inbox/`. With `--keep`, acta moves nothing. Good files are appended (dedupe by id) and removed.
+Cloud agents (Claude Duet channels) can't take the lock. They write whole files to `$ACTA_DATA/inbox/<recorded_at>-<agent>.jsonl`: one event per line, `seq` omitted, `id` optional (computed if missing). `acta ingest` validates each file; any bad line rejects the whole file. A line in `inbox/` whose `source.agent` is `manual`, `acta` or `acta-mt` is bad (`line N: source.agent "manual" writes only on this machine, never through the inbox`): those writers are Harlan and acta on diocletian, and `acta relay` forwards `manual` events to the pillar agents as Harlan's own words, so a remote file must not claim them. A file named on the command line (`acta ingest <file>`) is Harlan's own and may hold any writer. A rejected file moves to `$ACTA_DATA/inbox/rejected/<name>`, with `<name>.err` next to it holding the file name and each `line N: ...` error; if that name is taken, acta adds a suffix (`<base>-1.jsonl`, `<base>-2.jsonl`, ...) and never overwrites or deletes. The `*.jsonl` glob does not enter `rejected/`, so a rejected file is not retried. To retry, fix the file and move it back to `inbox/`. With `--keep`, acta moves nothing. Good files are appended (dedupe by id) and removed.
 
 ### Duet route: Drive to inbox
 
@@ -77,6 +78,16 @@ The folder is only read. acta never moves or deletes a file in Drive, so the fil
 A file that fails validation moves to `inbox/rejected/` with a `.err` file and fails that run of the unit. Its ID is already recorded, so later runs do not fetch it again. Read the reason in the `.err` file, with `acta doctor`, or with `journalctl --user -u acta-inbox`. To retry, fix the file and move it back to `inbox/`.
 
 One-time setup: share the Drive folder with the service account, then `rclone config create ccinbox drive scope=drive root_folder_id=<folder id> service_account_file=<key.json>` (key file mode 600). The remote stays in `~/.config/rclone/rclone.conf`.
+
+## Outbound: acta relay
+
+The inbox brings the Duet agents' events in; `acta relay` takes Harlan's out. It sends, to the channel of the agent that is waiting:
+
+- `pillar.asked`, to `duet:<pillar>`;
+- `checkin.answered`, to the agent that asked the check-in, with its question;
+- `quest.accepted` and `quest.declined`, to the agent that proposed the quest, with its title.
+
+Only events from `manual` go, and only once: `$ACTA_STATE/relay.json` records each sent id with the run it started. Nothing about delivery is written to the log. Each pillar channel's "Board relay" routine has an API trigger; acta POSTs the items to its fire URL as one text, a header line `acta relay v1 · to duet:<pillar> · N item(s) ...` and then one `{"event": ..., "re": ...}` JSON object per line. `acta-relay.path` runs it on every log change and `acta-relay.timer` retries every 10 minutes. Setup and the routine's prompt: `docs/duet-relay.md`. Why: `docs/decisions/0002-board-to-duet-relay.md`.
 
 ## Mastery (day one: performance skills)
 

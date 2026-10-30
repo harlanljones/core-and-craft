@@ -17,11 +17,18 @@ widget "town" {
   // What the Input is set to. The Input is not bound to `draft`: a text it is
   // given back loses its trailing space, so typing a second word would not stick.
   state seed = ""
+  // A check-in answer and a question for the open lot's Duet agent (acta ask;
+  // acta relay sends it). Both belong to the popup they were typed in, and the
+  // Inputs show them (OwlNode keeps a trailing space while typing).
   state answer = ""
+  state question = ""
   state hint = ""
   // The quest just tapped: it dims at once, until the snapshot (rebuilt by acta-snapshot.path) arrives.
   state flash = ""
   on s { flash = "" }
+  // Opening, switching or closing a popup drops what was typed, so a text typed
+  // under one pillar is never sent to another.
+  on pop { answer = ""; question = "" }
 
   // ---------------------------------------------------------------- names
   // Pillars read as the spec writes them, grouped under C.O.R.E. and C.R.A.F.T.
@@ -276,6 +283,8 @@ widget "town" {
   let selLot = find(lots5, l => "lot:" + l.id == pop)
   let selProp = find(props, p => "prop:" + p.id == pop)
   let selAsk = find(asks, c => "ask:" + c.id == pop)
+  // The open lot's latest question to its agent: asks are newest first.
+  let lotAsk = find(s.asks ?? [], a => a.pillar == (selLot.id ?? ""))
   let tags = (match(draft, "#([A-Za-z]+)") ?? [""])[0]
   let tagged = tags == "" ? [] : ids.filter(id => startsWith(id, lower(tags)))
 
@@ -345,7 +354,7 @@ widget "town" {
             Text { text: "Check-in · ${get(titles, selAsk.pillar ?? "career")}"; style: label; font: mono; color: magenta }
             Text { text: selAsk.question ?? ""; font: mono; style: body; maxLines: 3 }
             if selAsk != null {
-              Input { placeholder: "your answer"; onChange: answer = value; width: 220 }
+              Input { text: answer; placeholder: "your answer"; onChange: answer = value; width: 220 }
             }
             Row {
               gap: 8
@@ -374,6 +383,20 @@ widget "town" {
               }
             }
             Button { text: "add a quest"; color: accent; onTap: { seed = "#${selLot.title}"; draft = seed; hint = ""; pop = "" } }
+            // Legatus: the pillar's Duet agent. A question goes out by acta relay;
+            // the answer comes back through the inbox.
+            Text { text: "Legatus · ask ${selLot.title ?? ""}'s agent"; style: small; font: mono; color: muted; maxLines: 1 }
+            if lotAsk != null {
+              Text { text: "you: ${lotAsk.text ?? ""}"; style: small; font: mono; color: muted; maxLines: 2 }
+              Text { text: lotAsk.open == true ? "waiting for the answer" : lotAsk.answer ?? ""; style: small; font: mono; color: lotAsk.open == true ? muted : foreground; maxLines: 4 }
+            }
+            if selLot != null {
+              Row {
+                gap: 6
+                Input { text: question; placeholder: "your question"; onChange: question = value; width: 180 }
+                Button { text: "ask"; color: accent; onTap: { if trim(question) != "" { run("acta ask --pillar ${sh(selLot.id)} --text ${sh(trim(question))} --via board"); question = ""; pop = "" } } }
+              }
+            }
           }
         }
       }

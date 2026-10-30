@@ -48,6 +48,10 @@ busy() {
   "$acta" quest add --pillar outlook --title "Read 20 pages" --agent duet:outlook >/dev/null
   "$acta" checkin ask --pillar recovery --question "What's your target sleep window?" --agent duet:recovery >/dev/null
   "$acta" checkin ask --pillar time --question "Which hours are protected?" --agent duet:time >/dev/null
+  # Two questions to pillar agents: one answered, one still out.
+  ask=$("$acta" ask --pillar time --text "Which meeting can go this week?" --via board | cut -d' ' -f1)
+  "$acta" log pillar.answered --subject "$ask" --pillar time --agent duet:time --via chat --data '{"text":"The Thursday sync: it repeats the Monday notes."}' >/dev/null
+  "$acta" ask --pillar recovery --text "When should screens go off?" --via board >/dev/null
   "$acta" snapshot >/dev/null
   cat "$ACTA_STATE/snapshot.json"
 }
