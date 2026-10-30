@@ -1,0 +1,16 @@
+[Unit]
+Description=CORE & CRAFT: relay the board's asks and answers to the Duet pillar agents
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=ACTA_DATA=%h/core-and-craft ACTA_STATE=%h/.local/state/core-and-craft
+# One line pair per pillar that has a Board relay routine (docs/duet-relay.md):
+#   ACTA_RELAY_<PILLAR>=https://api.anthropic.com/v1/claude_code/routines/trig_.../fire
+#   ACTA_RELAY_<PILLAR>_TOKEN=sk-ant-oat01-...
+# Keep the file mode 600. A pillar without a pair keeps its items waiting.
+EnvironmentFile=-%h/.config/core-and-craft/relay.env
+ExecStart=%h/.local/bin/acta relay
+NoNewPrivileges=yes
+PrivateTmp=yes

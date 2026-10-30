@@ -189,6 +189,17 @@ ok(w.pop() === '', 'add a quest closes the popup')
 { const t = find(w.screen().children, n => n.kind === 'Input' && /add a quest/.test(n.p.placeholder))[0].p.text; ok(t === '#Career', 'add a quest prefills the Input', JSON.stringify(t)) }
 w.setPop('')
 
+// a lot asks its pillar's agent; the latest ask and its answer show there
+w.setPop('lot:time'); sc = w.screen()
+ok(byText(sc, 'The Thursday sync: it repeats the Monday notes.').length === 1, "a lot shows its agent's answer")
+w.setPop('lot:recovery'); sc = w.screen()
+ok(byText(sc, 'sent · waiting for the answer').length === 1, 'a lot shows its open ask as waiting')
+byText(sc, 'ask')[0].h.onTap(); ok(w.take().length === 0 && w.pop() === 'lot:recovery', 'ask with no question runs nothing')
+find(sc.children, n => n.kind === 'Input' && n.p.placeholder === 'your question')[0].h.onChange("  What's a good wind-down?  ")
+sc = w.screen(); byText(sc, 'ask')[0].h.onTap()
+ok(JSON.stringify(w.take()) === JSON.stringify([['run', `acta ask --pillar 'recovery' --text 'What'\\''s a good wind-down?' ${board}`]]), 'lot ask', JSON.stringify(acts))
+ok(w.pop() === '', 'ask closes the popup')
+
 // ------------------------------------------------------------------ a day not yet kept
 const open2 = open(Object.assign({}, snap, { streak: { days: 3, today: false } }))
 {

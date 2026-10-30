@@ -65,6 +65,19 @@ type Checkin struct {
 	Answer   string `json:"answer,omitempty"`
 }
 
+// Ask is Harlan's question to a pillar's Duet agent, sent from the board by
+// acta relay; open until the agent's pillar.answered comes back in the inbox.
+type Ask struct {
+	ID       string `json:"id"`
+	Pillar   string `json:"pillar"`
+	Text     string `json:"text"`
+	Asked    string `json:"asked"`
+	Open     bool   `json:"open"`
+	Answered string `json:"answered,omitempty"`
+	Answer   string `json:"answer,omitempty"`
+	From     string `json:"from,omitempty"`
+}
+
 var ruleParts = regexp.MustCompile(`^(runs|minutes):(\d+)$`)
 
 type engineInputs struct {
@@ -261,6 +274,40 @@ func checkins(live []event.Event, today time.Time, loc *time.Location) []Checkin
 	for _, c := range out {
 		if c.Open || c.Answered >= cutoff {
 			kept = append(kept, c)
+		}
+	}
+	return kept
+}
+
+// asks folds pillar.asked and pillar.answered like check-ins, the other way
+// round: every open ask, plus those answered in the last 7 days, newest first.
+// The latest answer wins, so an agent can follow up on its own answer.
+func asks(live []event.Event, today time.Time, loc *time.Location) []Ask {
+	idx := map[string]int{}
+	out := []Ask{}
+	for _, e := range live {
+		switch e.Kind {
+		case "pillar.asked":
+			if _, dup := idx[e.Subject]; dup {
+				continue
+			}
+			t, _ := decode(e.Data)["text"].(string)
+			idx[e.Subject] = len(out)
+			out = append(out, Ask{ID: e.Subject, Pillar: e.Pillar, Text: t, Asked: e.LocalDate(loc), Open: true})
+		case "pillar.answered":
+			if i, ok := idx[e.Subject]; ok {
+				out[i].Open = false
+				out[i].Answer, _ = decode(e.Data)["text"].(string)
+				out[i].Answered = e.LocalDate(loc)
+				out[i].From = e.Source.Agent
+			}
+		}
+	}
+	cutoff := today.AddDate(0, 0, -7).Format("2006-01-02")
+	kept := []Ask{}
+	for i := len(out) - 1; i >= 0; i-- {
+		if out[i].Open || out[i].Answered >= cutoff {
+			kept = append(kept, out[i])
 		}
 	}
 	return kept

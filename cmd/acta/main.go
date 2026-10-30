@@ -12,6 +12,8 @@
 //	acta quest <command>        add, finish, undo, accept, decline, drop, snooze, edit, list
 //	acta checkin ask|answer     a pillar question and its answer
 //	acta rest [--at D]          a rest day: keeps the streak
+//	acta ask --pillar P --text T  a question for a pillar's Duet agent
+//	acta relay [--dry-run]      send the board's answers and asks to the Duet agents
 package main
 
 import (
@@ -31,6 +33,7 @@ import (
 
 	"github.com/harlanljones/core-and-craft/internal/event"
 	"github.com/harlanljones/core-and-craft/internal/monkeytype"
+	"github.com/harlanljones/core-and-craft/internal/relay"
 	"github.com/harlanljones/core-and-craft/internal/snapshot"
 	"github.com/harlanljones/core-and-craft/internal/store"
 )
@@ -48,12 +51,15 @@ type env struct {
 	// command runs an external program and returns its stdout (doctor's
 	// rclone and systemctl checks). nil means no external programs.
 	command func(name string, args ...string) (string, error)
+	// relayBaseURL stands in for https://api.anthropic.com in tests.
+	relayBaseURL string
 }
 
 func (e env) logPath() string      { return filepath.Join(e.data, store.FileName) }
 func (e env) inboxDir() string     { return filepath.Join(e.data, "inbox") }
 func (e env) rejectedDir() string  { return filepath.Join(e.inboxDir(), "rejected") }
 func (e env) snapshotPath() string { return filepath.Join(e.state, snapshot.FileName) }
+func (e env) relayPath() string    { return filepath.Join(e.state, relay.FileName) }
 
 func defaultEnv() (env, error) {
 	home, err := os.UserHomeDir()
@@ -92,7 +98,8 @@ func main() {
 
 const usage = `usage: acta <command>
   init | mt pull [--all] | log <kind> | retract <id> | ingest [file...] | inbox pull [--dry-run] | snapshot | status [--json] | notify [--all] | doctor | version
-  quest add|done|undo|accept|decline|drop|snooze|edit|list | checkin ask|answer | rest`
+  quest add|done|undo|accept|decline|drop|snooze|edit|list | checkin ask|answer | rest
+  ask --pillar P --text T | relay [--dry-run]`
 
 func run(e env, args []string) int {
 	if len(args) == 0 {
@@ -119,6 +126,10 @@ func run(e env, args []string) int {
 		err = cmdCheckin(e, args[1:])
 	case "rest":
 		err = cmdRest(e, args[1:])
+	case "ask":
+		err = cmdAsk(e, args[1:])
+	case "relay":
+		err = cmdRelay(e, args[1:])
 	case "ingest":
 		err = cmdIngest(e, args[1:])
 	case "inbox":

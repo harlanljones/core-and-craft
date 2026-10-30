@@ -48,6 +48,8 @@ var Kinds = []string{
 	"quest.edited",
 	"checkin.asked",
 	"checkin.answered",
+	"pillar.asked",
+	"pillar.answered",
 	"day.rested",
 }
 
@@ -82,7 +84,7 @@ var (
 	dayRe     = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 	nativeRe  = regexp.MustCompile(`^evt_[0-9a-f]{16}$`)
 	importRe  = regexp.MustCompile(`^[a-z][a-z0-9]*:[A-Za-z0-9_-]+$`)
-	subjectRe = regexp.MustCompile(`^(skill|note|card|quest|checkin):[a-z0-9][a-z0-9-]*$`)
+	subjectRe = regexp.MustCompile(`^(skill|note|card|quest|checkin|ask):[a-z0-9][a-z0-9-]*$`)
 	daySubjRe = regexp.MustCompile(`^day:\d{4}-\d{2}-\d{2}$`)
 	skillRe   = regexp.MustCompile(`^skill:[a-z0-9][a-z0-9-]*$`)
 	ruleRe    = regexp.MustCompile(`^(runs|minutes):([1-9][0-9]{0,3})$`)
@@ -175,11 +177,13 @@ func Validate(e Event, requireSeq bool) error {
 			add("subject: day.rested needs day:YYYY-MM-DD, got %q", e.Subject)
 		}
 	case !subjectRe.MatchString(e.Subject):
-		add("subject: want skill:|note:|card:|quest:|checkin:<slug>, got %q", e.Subject)
+		add("subject: want skill:|note:|card:|quest:|checkin:|ask:<slug>, got %q", e.Subject)
 	case strings.HasPrefix(e.Kind, "quest.") && !strings.HasPrefix(e.Subject, "quest:"):
 		add("subject: %s needs quest:<slug>, got %q", e.Kind, e.Subject)
 	case strings.HasPrefix(e.Kind, "checkin.") && !strings.HasPrefix(e.Subject, "checkin:"):
 		add("subject: %s needs checkin:<slug>, got %q", e.Kind, e.Subject)
+	case strings.HasPrefix(e.Kind, "pillar.") && !strings.HasPrefix(e.Subject, "ask:"):
+		add("subject: %s needs ask:<slug>, got %q", e.Kind, e.Subject)
 	}
 	if e.Source.Via == "" {
 		add("source.via: required")
@@ -348,6 +352,17 @@ func validateData(e Event) []error {
 		text("question", 300)
 	case "checkin.answered":
 		text("text", 2000)
+	case "pillar.asked":
+		// Harlan asks a pillar's Duet agent; the board relays it (acta relay).
+		text("text", 2000)
+		if e.Source.Agent != "manual" {
+			add("asked: only manual asks a pillar; %s answers", e.Source.Agent)
+		}
+	case "pillar.answered":
+		text("text", 2000)
+		if !strings.HasPrefix(e.Source.Agent, agentDuetPrefix) {
+			add("answered: only a duet:<channel> agent answers, got %s", e.Source.Agent)
+		}
 	}
 	return errs
 }

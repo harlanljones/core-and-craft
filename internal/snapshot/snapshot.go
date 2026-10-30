@@ -90,6 +90,7 @@ type Snapshot struct {
 	Quests   []QuestView `json:"quests"`
 	Proposed []Proposal  `json:"proposed"`
 	Checkins []Checkin   `json:"checkins"`
+	Asks     []Ask       `json:"asks"`
 	XP       Level       `json:"xp"`
 	Streak   Streak      `json:"streak"`
 	History  []int       `json:"history"`
@@ -442,6 +443,7 @@ func Build(evs []event.Event, bad []store.LineError, src Source, now time.Time, 
 		today: todayT, quiet: pillarCount, skills: skillByID, runs: runsByDay, minutes: minutes, timeZone: loc,
 	})
 	snap.Checkins = checkins(live, todayT, loc)
+	snap.Asks = asks(live, todayT, loc)
 	questByID := map[string]Quest{}
 	for _, q := range qs {
 		questByID[q.ID] = q

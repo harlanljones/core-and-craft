@@ -218,3 +218,25 @@ func TestImportedRunKeepsStreakAndCountsOnce(t *testing.T) {
 		t.Fatalf("want 3 runs x 5 xp, got %d", s2.XP.Total)
 	}
 }
+
+// asks are Harlan's questions to a pillar's agent: open ones, plus those
+// answered in the last 7 days, newest first. No xp either way.
+func TestAsksInSnapshot(t *testing.T) {
+	l := &qlog{}
+	l.add("pillar.asked", "ask:old", "manual", "2026-10-01", `{"text":"Old?"}`)
+	l.add("pillar.answered", "ask:old", "duet:faith", "2026-10-02", `{"text":"long ago"}`)
+	l.add("pillar.asked", "ask:cut", "manual", "2026-10-28", `{"text":"What should I cut?"}`)
+	l.add("pillar.answered", "ask:cut", "duet:time", "2026-10-28", `{"text":"The Thursday sync."}`)
+	l.add("pillar.asked", "ask:sleep", "manual", "2026-10-29", `{"text":"Sleep window?"}`)
+	s := Build(l.evs, nil, Source{}, now, la)
+	as := s.Asks
+	if len(as) != 2 || as[0].ID != "ask:sleep" || !as[0].Open || as[0].Pillar != "competence" {
+		t.Fatalf("asks %+v", as)
+	}
+	if as[1].Open || as[1].Answer != "The Thursday sync." || as[1].From != "duet:time" || as[1].Answered != "2026-10-28" {
+		t.Fatalf("answered ask %+v", as[1])
+	}
+	if s.XP.Total != 0 {
+		t.Fatalf("asks earn no xp, got %d", s.XP.Total)
+	}
+}
