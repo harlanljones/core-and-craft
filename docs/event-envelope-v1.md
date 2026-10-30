@@ -49,7 +49,7 @@ body = {"agent": a, "at": at, "data": data, "kind": kind, "recorded_at": rec, "s
 - `quest.snoozed` `{until: YYYY-MM-DD}`: hidden until that day.
 - `quest.edited` `{title?, priority?, every?}`: at least one field. The latest edit wins.
 - `checkin.asked` `{question}` and `checkin.answered` `{text}`: a pillar agent asks, Harlan answers, under the same `checkin:<slug>`.
-- `pillar.asked` `{text}` and `pillar.answered` `{text}`: the other way round from a check-in. Harlan asks a pillar's Duet agent (only `manual` writes `pillar.asked`), `acta relay` sends it, and the agent answers under the same `ask:<slug>` (only a `duet:<channel>` agent writes `pillar.answered`). Text is at most 2,000 bytes. Neither earns xp.
+- `pillar.asked` `{text}` and `pillar.answered` `{text}`: the other way round from a check-in. Harlan asks a pillar's Duet agent (only `manual` writes `pillar.asked`), `acta relay` sends it, and the agent answers under the same `ask:<slug>` (only the pillar's own channel writes `pillar.answered`: its `source.agent` must be `duet:<pillar>` for the event's `pillar`, and the snapshot ignores an answer filed under a pillar other than the ask's). Text is at most 2,000 bytes. Neither earns xp.
 - `day.rested` `{}`, subject `day:YYYY-MM-DD`: a rest day keeps the streak.
 
 Xp, levels and scores are never fields on any event. acta computes them in the snapshot.

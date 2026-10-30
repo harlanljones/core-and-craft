@@ -369,8 +369,9 @@ func validateData(e Event) []error {
 		}
 	case "pillar.answered":
 		text("text", 2000)
-		if !strings.HasPrefix(e.Source.Agent, agentDuetPrefix) {
-			add("answered: only a duet:<channel> agent answers, got %s", e.Source.Agent)
+		// A channel speaks for its own pillar: duet:time answers time's asks.
+		if e.Source.Agent != agentDuetPrefix+e.Pillar {
+			add("answered: only duet:%s answers a %s ask, got %s", e.Pillar, e.Pillar, e.Source.Agent)
 		}
 	}
 	return errs

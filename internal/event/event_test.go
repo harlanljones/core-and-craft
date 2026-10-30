@@ -194,7 +194,7 @@ func TestPillarAskKinds(t *testing.T) {
 	answered := func() Event {
 		e := asked()
 		e.Kind, e.Data = "pillar.answered", json.RawMessage(`{"text":"The Thursday sync."}`)
-		e.Source.Agent = "duet:time"
+		e.Source.Agent = "duet:competence"
 		return e
 	}
 	for name, e := range map[string]Event{"asked": asked(), "answered": answered()} {
@@ -218,6 +218,9 @@ func TestPillarAskKinds(t *testing.T) {
 			return e
 		},
 		"answer bad slug": func() Event { e := answered(); e.Subject = "ask:"; return e },
+		// A channel answers only for its own pillar.
+		"answer from another channel": func() Event { e := answered(); e.Source.Agent = "duet:time"; return e },
+		"answer for another pillar":   func() Event { e := answered(); e.Pillar = "economic"; return e },
 	}
 	for name, mk := range bad {
 		if Validate(mk(), true) == nil {

@@ -295,7 +295,9 @@ func asks(live []event.Event, today time.Time, loc *time.Location) []Ask {
 			idx[e.Subject] = len(out)
 			out = append(out, Ask{ID: e.Subject, Pillar: e.Pillar, Text: t, Asked: e.LocalDate(loc), Open: true})
 		case "pillar.answered":
-			if i, ok := idx[e.Subject]; ok {
+			// Only the ask's own pillar answers it (Validate also requires
+			// the agent to be duet:<that pillar>).
+			if i, ok := idx[e.Subject]; ok && e.Pillar == out[i].Pillar && e.Source.Agent == "duet:"+out[i].Pillar {
 				out[i].Open = false
 				out[i].Answer, _ = decode(e.Data)["text"].(string)
 				out[i].Answered = e.LocalDate(loc)
