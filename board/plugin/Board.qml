@@ -138,7 +138,8 @@ Item {
       y: tile.place.y * board.pitch
       width: tile.place.w * board.pitch - board.gap
       height: tile.place.h * board.pitch - board.gap
-      color: widget.alpha(widget.ink("background"), board.tileOpacity)
+      // A widget with a screen { } is as opaque as its map, so the tile and the map are the same water.
+      color: widget.alpha(widget.ink("background"), widget.hasScreen ? 0.96 : board.tileOpacity)
       clip: true
       // The other tiles don't show while a screen is open: they fade out and back.
       opacity: board.screenNode === null ? 1 : 0
