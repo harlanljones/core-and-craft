@@ -1,7 +1,7 @@
 package main
 
-// acta inbox pull: copy new Duet envelope files from the Drive folder into
-// inbox/ and ingest them. The remote is read only. The Google service
+// acta inbox pull: copy new Duet envelope files, and the note bodies they
+// name (<sha256>.md), from the Drive folder into inbox/ and ingest them. The remote is read only. The Google service
 // account that rclone uses can read the shared folder but cannot delete
 // files it does not own, so `rclone move` copied each file and then failed
 // with 403 insufficientFilePermissions. Instead, acta remembers the Drive
@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"syscall"
@@ -164,7 +165,7 @@ func cmdInboxPull(e env, args []string) error {
 
 // listRemote runs rclone lsjson on the folder (no recursion).
 func listRemote(e env, remote string) ([]driveFile, error) {
-	out, err := e.runExt("rclone", "lsjson", remote, "--files-only", "--include", "*.jsonl", "--drive-skip-gdocs")
+	out, err := e.runExt("rclone", "lsjson", remote, "--files-only", "--include", "*.jsonl", "--include", "*.md", "--drive-skip-gdocs")
 	if err != nil {
 		return nil, extErr(err)
 	}
@@ -193,17 +194,25 @@ func checkRemoteName(f driveFile) error {
 		return errors.New("name has a path separator")
 	case strings.HasPrefix(f.Path, "."):
 		return errors.New("name starts with a dot")
+	case strings.HasSuffix(f.Path, ".md"):
+		// A note body is named by its sha256 (docs/knowledge-graph.md).
+		if !bodyNameRe.MatchString(f.Path) {
+			return errors.New("a note body must be named <sha256>.md")
+		}
 	case !strings.HasSuffix(f.Path, ".jsonl") || f.Path == ".jsonl":
-		return errors.New("name does not end in .jsonl")
+		return errors.New("name does not end in .jsonl or .md")
 	}
 	return nil
 }
+
+var bodyNameRe = regexp.MustCompile(`^[0-9a-f]{64}\.md$`)
 
 // fetchOne copies one Drive file into the inbox and returns its local name.
 // rclone writes to a hidden temp name that the *.jsonl glob ignores; acta
 // then hard-links it into place, which fails if the name exists, so an
 // existing file is never overwritten. If the name is taken by a different
-// file, it uses <base>.<id8>.jsonl (then <base>.<id8>-1.jsonl, ...).
+// file, it uses <base>.<id8>.jsonl (then <base>.<id8>-1.jsonl, ...); a .md
+// body keeps its extension the same way.
 func fetchOne(e env, remote string, f driveFile) (string, error) {
 	inbox := e.inboxDir()
 	if err := os.MkdirAll(inbox, 0o755); err != nil {
@@ -223,14 +232,15 @@ func fetchOne(e env, remote string, f driveFile) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("copy: %w", err)
 	}
-	base := strings.TrimSuffix(f.Path, ".jsonl")
+	ext := filepath.Ext(f.Path)
+	base := strings.TrimSuffix(f.Path, ext)
 	for n := 0; n < 100; n++ {
 		cand := f.Path
 		switch {
 		case n == 1:
-			cand = base + "." + safeID(id8) + ".jsonl"
+			cand = base + "." + safeID(id8) + ext
 		case n > 1:
-			cand = fmt.Sprintf("%s.%s-%d.jsonl", base, safeID(id8), n-1)
+			cand = fmt.Sprintf("%s.%s-%d%s", base, safeID(id8), n-1, ext)
 		}
 		dst := filepath.Join(inbox, cand)
 		err := os.Link(tmp, dst)

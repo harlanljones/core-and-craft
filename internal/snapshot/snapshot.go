@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/harlanljones/core-and-craft/internal/event"
+	"github.com/harlanljones/core-and-craft/internal/graph"
 	"github.com/harlanljones/core-and-craft/internal/store"
 )
 
@@ -97,6 +98,10 @@ type Snapshot struct {
 	// LeveledToday lists the pillars that passed a level boundary today, in
 	// framework order, for the town's ✦.
 	LeveledToday []string `json:"leveled_today"`
+
+	// Graph counts graph.json, which acta snapshot writes beside this file
+	// (docs/knowledge-graph.md). Build leaves it nil; cmd/acta fills it in.
+	Graph *graph.Summary `json:"graph,omitempty"`
 }
 
 // Effective drops retracted events and events superseded by a live one.

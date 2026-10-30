@@ -228,3 +228,38 @@ func TestPillarAskKinds(t *testing.T) {
 		}
 	}
 }
+
+func TestNoteAddedPath(t *testing.T) {
+	sum := strings.Repeat("ab", 32)
+	note := func(subject, data string) Event {
+		e := valid()
+		e.Kind, e.Subject, e.Data = "note.added", subject, json.RawMessage(data)
+		return e
+	}
+	for _, e := range []Event{
+		note("note:martin-luther", `{"path":"notes/nodes/martin-luther.md","sha256":"`+sum+`","title":"Martin Luther","type":"person"}`),
+		note("note:religion-and-history", `{"path":"notes/competence/religion-and-history.md","sha256":"`+sum+`"}`),
+		note("note:legacy", `{}`),
+	} {
+		if err := Validate(e, true); err != nil {
+			t.Errorf("%s: %v", e.Data, err)
+		}
+	}
+	for name, e := range map[string]Event{
+		"not a pillar":     note("note:x", `{"path":"notes/misc/x.md","sha256":"`+sum+`"}`),
+		"slug mismatch":    note("note:x", `{"path":"notes/nodes/y.md","sha256":"`+sum+`"}`),
+		"escapes notes":    note("note:x", `{"path":"notes/../x.md","sha256":"`+sum+`"}`),
+		"uppercase slug":   note("note:x", `{"path":"notes/nodes/X.md","sha256":"`+sum+`"}`),
+		"path without sum": note("note:x", `{"path":"notes/nodes/x.md"}`),
+		"sum without path": note("note:x", `{"sha256":"`+sum+`"}`),
+		"short sum":        note("note:x", `{"path":"notes/nodes/x.md","sha256":"abc"}`),
+		"empty title":      note("note:x", `{"title":""}`),
+	} {
+		if Validate(e, true) == nil {
+			t.Errorf("%s: want error", name)
+		}
+	}
+	if f, s, ok := NotePath("notes/faith/sabbath.md"); !ok || f != "faith" || s != "sabbath" {
+		t.Errorf("NotePath %q %q %v", f, s, ok)
+	}
+}

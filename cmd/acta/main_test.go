@@ -56,16 +56,31 @@ func readSnapshot(t *testing.T, e env) snapshot.Snapshot {
 	return s
 }
 
+// daySeed is the Oct 29 seed: the typing skill, five runs and one note.
+const daySeed = "../../seed/2026-10-29T174500Z-duet-competence.jsonl"
+
+// stageDaySeed puts the day-one seed in the inbox as a Duet channel sends it:
+// the event file and the note body named by its sha256.
+func stageDaySeed(t *testing.T, e env) (inbox string, body []byte) {
+	t.Helper()
+	b, err := os.ReadFile(daySeed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inbox = filepath.Join(e.inboxDir(), filepath.Base(daySeed))
+	os.WriteFile(inbox, b, 0o644)
+	note, err := os.ReadFile("../../seed/notes/competence/religion-and-history.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(e.inboxDir(), sumHex(note)+".md"), note, 0o644)
+	return inbox, b
+}
+
 func TestSeedIngestSnapshotStatus(t *testing.T) {
 	e, out, _ := testEnv(t, nil)
 	mustRun(t, e, "init")
-	seed, _ := filepath.Glob("../../seed/*.jsonl")
-	if len(seed) != 1 {
-		t.Fatalf("want one seed file, got %v", seed)
-	}
-	b, _ := os.ReadFile(seed[0])
-	inbox := filepath.Join(e.inboxDir(), filepath.Base(seed[0]))
-	os.WriteFile(inbox, b, 0o644)
+	inbox, b := stageDaySeed(t, e)
 
 	mustRun(t, e, "ingest")
 	if !strings.Contains(out.String(), "8 new") {
@@ -73,6 +88,12 @@ func TestSeedIngestSnapshotStatus(t *testing.T) {
 	}
 	if _, err := os.Stat(inbox); !os.IsNotExist(err) {
 		t.Fatal("inbox file should be removed after ingest")
+	}
+	if left, _ := filepath.Glob(filepath.Join(e.inboxDir(), "*.md")); len(left) != 0 {
+		t.Fatalf("placed bodies should leave the inbox, left %v", left)
+	}
+	if _, err := os.Stat(filepath.Join(e.data, "notes", "competence", "religion-and-history.md")); err != nil {
+		t.Fatalf("note not placed: %v", err)
 	}
 	// Re-ingesting the same content is a no-op.
 	os.WriteFile(inbox, b, 0o644)
@@ -103,11 +124,7 @@ func TestSeedIngestSnapshotStatus(t *testing.T) {
 // goodLine returns the first event line of the seed file.
 func goodLine(t *testing.T) string {
 	t.Helper()
-	seed, _ := filepath.Glob("../../seed/*.jsonl")
-	if len(seed) != 1 {
-		t.Fatalf("want one seed file, got %v", seed)
-	}
-	b, err := os.ReadFile(seed[0])
+	b, err := os.ReadFile(daySeed)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,9 +322,7 @@ func TestMtPullStrippedResultsQualify(t *testing.T) {
 	e, _, _ := testEnv(t, map[string]string{"MONKEYTYPE_APE_KEY": key})
 	e.mtBaseURL = srv.URL
 	mustRun(t, e, "init")
-	seed, _ := filepath.Glob("../../seed/*.jsonl")
-	b, _ := os.ReadFile(seed[0])
-	os.WriteFile(filepath.Join(e.inboxDir(), filepath.Base(seed[0])), b, 0o644)
+	stageDaySeed(t, e)
 	mustRun(t, e, "ingest")
 	mustRun(t, e, "mt", "pull")
 	mustRun(t, e, "snapshot")
@@ -331,9 +346,7 @@ func TestMtPullOfScreenshotRunCountsOnce(t *testing.T) {
 	e, _, _ := testEnv(t, map[string]string{"MONKEYTYPE_APE_KEY": key})
 	e.mtBaseURL = srv.URL
 	mustRun(t, e, "init")
-	seed, _ := filepath.Glob("../../seed/*.jsonl")
-	b, _ := os.ReadFile(seed[0])
-	os.WriteFile(filepath.Join(e.inboxDir(), filepath.Base(seed[0])), b, 0o644)
+	stageDaySeed(t, e)
 	mustRun(t, e, "ingest")
 	mustRun(t, e, "mt", "pull")
 	mustRun(t, e, "snapshot")

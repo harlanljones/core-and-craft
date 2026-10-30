@@ -27,6 +27,14 @@ Widgets never read `events.jsonl`. They read `$ACTA_STATE/snapshot.json` (defaul
 }
 ```
 
+### The knowledge graph (v1, additive)
+
+```json
+"graph": {"nodes": 74, "edges": 205, "notes": 64, "stubs": 0, "new_7d": 64, "errors": 0}
+```
+
+`acta snapshot` also writes `$ACTA_STATE/graph.json` beside this file, the same way (temp file and rename): every node and edge. `new_7d` counts notes first logged in the last seven days, today included. Its shape is in `docs/knowledge-graph.md`. A widget that draws the graph reads `graph.json`; one that only shows counts reads this summary.
+
 ### The game (v1, additive)
 
 ```json

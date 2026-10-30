@@ -90,14 +90,30 @@ type Event struct {
 }
 
 var (
-	dayRe     = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
-	nativeRe  = regexp.MustCompile(`^evt_[0-9a-f]{16}$`)
-	importRe  = regexp.MustCompile(`^[a-z][a-z0-9]*:[A-Za-z0-9_-]+$`)
-	subjectRe = regexp.MustCompile(`^(skill|note|card|quest|checkin|ask):[a-z0-9][a-z0-9-]*$`)
-	daySubjRe = regexp.MustCompile(`^day:\d{4}-\d{2}-\d{2}$`)
-	skillRe   = regexp.MustCompile(`^skill:[a-z0-9][a-z0-9-]*$`)
-	ruleRe    = regexp.MustCompile(`^(runs|minutes):([1-9][0-9]{0,3})$`)
+	dayRe      = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+	nativeRe   = regexp.MustCompile(`^evt_[0-9a-f]{16}$`)
+	importRe   = regexp.MustCompile(`^[a-z][a-z0-9]*:[A-Za-z0-9_-]+$`)
+	subjectRe  = regexp.MustCompile(`^(skill|note|card|quest|checkin|ask):[a-z0-9][a-z0-9-]*$`)
+	daySubjRe  = regexp.MustCompile(`^day:\d{4}-\d{2}-\d{2}$`)
+	skillRe    = regexp.MustCompile(`^skill:[a-z0-9][a-z0-9-]*$`)
+	ruleRe     = regexp.MustCompile(`^(runs|minutes):([1-9][0-9]{0,3})$`)
+	notePathRe = regexp.MustCompile(`^notes/([a-z]+)/([a-z0-9][a-z0-9-]*)\.md$`)
+	sha256Re   = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
+
+// NodesDir is the notes folder for nodes every pillar shares (people,
+// events, concepts); notes/<pillar>/ holds a pillar's own notes.
+const NodesDir = "nodes"
+
+// NotePath splits a note path, notes/<pillar or nodes>/<slug>.md, into its
+// folder and slug. ok is false for any other path.
+func NotePath(p string) (folder, slug string, ok bool) {
+	m := notePathRe.FindStringSubmatch(p)
+	if m == nil || (m[1] != NodesDir && !contains(Pillars, m[1])) {
+		return "", "", false
+	}
+	return m[1], m[2], true
+}
 
 func contains(list []string, s string) bool {
 	for _, v := range list {
@@ -316,6 +332,33 @@ func validateData(e Event) []error {
 	}
 
 	switch e.Kind {
+	case "note.added":
+		// path and sha256 bind the event to one version of a note file; the
+		// inbox places that file (docs/knowledge-graph.md). Older lines may
+		// carry neither.
+		p, hasPath := str("path")
+		sum, hasSum := str("sha256")
+		if hasPath {
+			_, slug, ok := NotePath(p)
+			switch {
+			case !ok:
+				add("path: want notes/<pillar>/<slug>.md or notes/nodes/<slug>.md, got %q", p)
+			case e.Subject != "note:"+slug:
+				add("path: %s is not the file of %s", p, e.Subject)
+			}
+			if !hasSum {
+				add("sha256: required with path")
+			}
+		}
+		if hasSum && !sha256Re.MatchString(sum) {
+			add("sha256: want 64 lowercase hex characters")
+		}
+		if hasSum && !hasPath {
+			add("path: required with sha256")
+		}
+		if _, ok := m["title"]; ok {
+			text("title", 200)
+		}
 	case "quest.added":
 		text("title", 200)
 		priority()
