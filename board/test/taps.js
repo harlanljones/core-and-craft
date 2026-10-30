@@ -152,6 +152,10 @@ find(sc.children, n => n.kind === 'Input' && n.p.placeholder === 'your answer')[
 sc = w.screen(); byText(sc, 'later')[0].h.onTap(); ok(w.pop() === '' && w.take().length === 0, 'later closes and runs nothing')
 w.setPop('ask:' + c0.id)
 sc = w.screen(); byText(sc, 'send')[0].h.onTap()
+ok(w.take().length === 0, 'later drops the typed answer: reopened, send runs nothing')
+w.setPop('ask:' + c0.id)
+find(w.screen().children, n => n.kind === 'Input' && n.p.placeholder === 'your answer')[0].h.onChange("22:30 to 06:30  it's fine")
+sc = w.screen(); byText(sc, 'send')[0].h.onTap()
 ok(JSON.stringify(w.take()) === JSON.stringify([['run', `acta checkin answer ${ID(c0.id)} --text '22:30 to 06:30  it'\\''s fine' ${board}`]]), 'check-in send', JSON.stringify(acts))
 // an answer with quotes and $(...) stays one quoted word; an empty one runs nothing
 {
@@ -199,6 +203,35 @@ find(sc.children, n => n.kind === 'Input' && n.p.placeholder === 'your question'
 sc = w.screen(); byText(sc, 'ask')[0].h.onTap()
 ok(JSON.stringify(w.take()) === JSON.stringify([['run', `acta ask --pillar 'recovery' --text 'What'\\''s a good wind-down?' ${board}`]]), 'lot ask', JSON.stringify(acts))
 ok(w.pop() === '', 'ask closes the popup')
+
+// typed text belongs to the popup it was typed in: dismissing it, or opening
+// another lot or check-in, clears it, so it never goes to another pillar
+{
+  const input = ph => find(w.screen().children, n => n.kind === 'Input' && n.p.placeholder === ph)[0]
+  const dismiss = () => shown(w.screen(), 'Popup').forEach(n => n.h.onDismiss && n.h.onDismiss())
+  w.setPop('lot:economic')
+  input('your question').h.onChange('Can I afford the trip?')
+  ok(input('your question').p.text === 'Can I afford the trip?', 'the question box shows what ask will send', JSON.stringify(input('your question').p.text))
+  dismiss(); ok(w.pop() === '', 'dismiss closes the lot', w.pop())
+  w.setPop('lot:relationships')
+  ok((input('your question').p.text ?? '') === '', 'another lot opens with an empty question', JSON.stringify(input('your question').p.text))
+  byText(w.screen(), 'ask')[0].h.onTap()
+  ok(w.take().length === 0 && w.pop() === 'lot:relationships', 'ask after dismiss sends nothing to the other lot', JSON.stringify(acts))
+  // switching lots with the popup open clears it too
+  w.setPop('lot:economic'); input('your question').h.onChange('Can I afford the trip?')
+  w.setPop('lot:relationships'); byText(w.screen(), 'ask')[0].h.onTap()
+  ok(w.take().length === 0, 'switching lots drops the question')
+  // the same for a check-in answer
+  const [ca, cb] = snap.checkins.filter(c => c.open)
+  w.setPop('ask:' + ca.id); input('your answer').h.onChange('22:30')
+  ok(input('your answer').p.text === '22:30', 'the answer box shows what send will send', JSON.stringify(input('your answer').p.text))
+  dismiss()
+  w.setPop('ask:' + cb.id)
+  ok((input('your answer').p.text ?? '') === '', 'another check-in opens with an empty answer')
+  byText(w.screen(), 'send')[0].h.onTap()
+  ok(w.take().length === 0 && w.pop() === 'ask:' + cb.id, 'send after dismiss answers nothing', JSON.stringify(acts))
+  w.setPop('')
+}
 
 // ------------------------------------------------------------------ a day not yet kept
 const open2 = open(Object.assign({}, snap, { streak: { days: 3, today: false } }))

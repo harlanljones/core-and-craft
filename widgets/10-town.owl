@@ -17,13 +17,18 @@ widget "town" {
   // What the Input is set to. The Input is not bound to `draft`: a text it is
   // given back loses its trailing space, so typing a second word would not stick.
   state seed = ""
+  // A check-in answer and a question for the open lot's Duet agent (acta ask;
+  // acta relay sends it). Both belong to the popup they were typed in, and the
+  // Inputs show them (OwlNode keeps a trailing space while typing).
   state answer = ""
-  // A question for the open lot's Duet agent (acta ask; acta relay sends it).
   state question = ""
   state hint = ""
   // The quest just tapped: it dims at once, until the snapshot (rebuilt by acta-snapshot.path) arrives.
   state flash = ""
   on s { flash = "" }
+  // Opening, switching or closing a popup drops what was typed, so a text typed
+  // under one pillar is never sent to another.
+  on pop { answer = ""; question = "" }
 
   // ---------------------------------------------------------------- names
   // Pillars read as the spec writes them, grouped under C.O.R.E. and C.R.A.F.T.
@@ -349,7 +354,7 @@ widget "town" {
             Text { text: "Check-in · ${get(titles, selAsk.pillar ?? "career")}"; style: label; font: mono; color: magenta }
             Text { text: selAsk.question ?? ""; font: mono; style: body; maxLines: 3 }
             if selAsk != null {
-              Input { placeholder: "your answer"; onChange: answer = value; width: 220 }
+              Input { text: answer; placeholder: "your answer"; onChange: answer = value; width: 220 }
             }
             Row {
               gap: 8
@@ -388,7 +393,7 @@ widget "town" {
             if selLot != null {
               Row {
                 gap: 6
-                Input { placeholder: "your question"; onChange: question = value; width: 180 }
+                Input { text: question; placeholder: "your question"; onChange: question = value; width: 180 }
                 Button { text: "ask"; color: accent; onTap: { if trim(question) != "" { run("acta ask --pillar ${sh(selLot.id)} --text ${sh(trim(question))} --via board"); question = ""; pop = "" } } }
               }
             }
