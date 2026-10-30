@@ -3,10 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -469,5 +471,149 @@ func TestCheckinAndRest(t *testing.T) {
 	}
 	if evs[1].Pillar != "recovery" || evs[1].Source.Agent != "manual" || evs[2].Subject != "day:2026-10-29" {
 		t.Fatalf("events %+v", evs)
+	}
+}
+
+// fakeCommands answers external programs from a table keyed by name; a
+// missing name acts as not installed.
+func fakeCommands(t *testing.T, outs map[string]string, errs map[string]error) func(string, ...string) (string, error) {
+	t.Helper()
+	return func(name string, args ...string) (string, error) {
+		if err, ok := errs[name]; ok {
+			return outs[name], err
+		}
+		out, ok := outs[name]
+		if !ok {
+			return "", exec.ErrNotFound
+		}
+		return out, nil
+	}
+}
+
+func rcloneConf(t *testing.T, body string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "rclone.conf")
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return "Configuration file is stored at:\n" + p + "\n"
+}
+
+func TestDoctorRejectedInbox(t *testing.T) {
+	e, out, _ := testEnv(t, nil)
+	mustRun(t, e, "init")
+	mustRun(t, e, "doctor")
+	if !strings.Contains(out.String(), "inbox: ok, no rejected files") {
+		t.Fatalf("doctor %q", out.String())
+	}
+	os.MkdirAll(e.rejectedDir(), 0o755)
+	old := time.Now().Add(-time.Hour)
+	for _, f := range []struct{ name, msg string }{
+		{"a.jsonl", "a.jsonl rejected:\nline 1: invalid character 'x'\n"},
+		{"b.jsonl", "b.jsonl rejected:\nline 3: unknown agent \"stranger\"\nline 4: more\n"},
+	} {
+		p := filepath.Join(e.rejectedDir(), f.name)
+		os.WriteFile(p, []byte("{}\n"), 0o644)
+		os.WriteFile(p+".err", []byte(f.msg), 0o644)
+		if f.name == "a.jsonl" {
+			os.Chtimes(p, old, old)
+			os.Chtimes(p+".err", old, old)
+		}
+	}
+	out.Reset()
+	mustRun(t, e, "doctor") // warnings do not fail doctor
+	got := out.String()
+	if !strings.Contains(got, "warn: inbox: 2 rejected file(s)") ||
+		!strings.Contains(got, `newest b.jsonl: line 3: unknown agent "stranger"`) ||
+		!strings.Contains(got, "doctor: 1 warning(s)") {
+		t.Fatalf("doctor %q", got)
+	}
+}
+
+func TestDoctorClientID(t *testing.T) {
+	cases := []struct {
+		name string
+		outs map[string]string
+		want string
+	}{
+		{"missing", nil, "warn: rclone: remote ccinbox uses rclone's shared Google Drive client_id"},
+		{"empty", nil, "warn: rclone: remote ccinbox uses rclone's shared"},
+		{"present", nil, "rclone: ok, remote ccinbox has its own client_id"},
+		{"remote absent", nil, "rclone: not configured (no [ccinbox] remote"},
+		{"no config file", nil, "rclone: not configured (no "},
+		{"no rclone", map[string]string{}, "rclone: not configured (rclone not found)"},
+	}
+	confs := map[string]string{
+		"missing":       "[other]\nclient_id = x\n\n[ccinbox]\ntype = drive\nscope = drive\ntoken = {\"access_token\":\"SECRET\"}\n",
+		"empty":         "[ccinbox]\ntype = drive\nclient_id =\n",
+		"present":       "[ccinbox]\ntype = drive\nclient_id = 123.apps.googleusercontent.com\nclient_secret = SECRET\n",
+		"remote absent": "[gdrive]\ntype = drive\n",
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e, out, _ := testEnv(t, nil)
+			outs := c.outs
+			switch {
+			case confs[c.name] != "":
+				outs = map[string]string{"rclone": rcloneConf(t, confs[c.name])}
+			case c.name == "no config file":
+				outs = map[string]string{"rclone": "Configuration file doesn't exist, but rclone will use this path:\n" + filepath.Join(t.TempDir(), "rclone.conf") + "\n"}
+			}
+			e.command = fakeCommands(t, outs, nil)
+			mustRun(t, e, "doctor")
+			got := out.String()
+			if !strings.Contains(got, c.want) {
+				t.Fatalf("doctor %q, want %q", got, c.want)
+			}
+			if strings.Contains(got, "SECRET") {
+				t.Fatalf("doctor printed a secret: %q", got)
+			}
+			if strings.HasPrefix(c.want, "warn:") && !strings.Contains(got, "https://rclone.org/drive/#making-your-own-client-id") {
+				t.Fatalf("doctor %q lacks the docs link", got)
+			}
+			if !strings.HasPrefix(c.want, "warn:") && strings.Contains(got, "warn:") {
+				t.Fatalf("doctor %q should not warn", got)
+			}
+		})
+	}
+}
+
+func TestDoctorInboxPull(t *testing.T) {
+	e0, _, _ := testEnv(t, nil)
+	now := e0.now()
+	unix := func(d time.Duration) string { return fmt.Sprintf("@%d", now.Add(-d).Unix()) }
+	cases := []struct {
+		name, show string
+		err        error
+		want       string
+	}{
+		{"ok", "LoadState=loaded\nResult=success\nExecMainExitTimestamp=" + unix(4*time.Minute) + "\n", nil, "inbox pull: ok, last run 4m0s ago"},
+		{"ok default format", "Result=success\nExecMainExitTimestamp=" + now.Add(-2*time.Minute).Format("Mon 2006-01-02 15:04:05 MST") + "\nLoadState=loaded\n", nil, "inbox pull: ok, last run 2m0s ago"},
+		{"failed", "LoadState=loaded\nResult=exit-code\nExecMainExitTimestamp=" + unix(time.Minute) + "\n", nil, "warn: inbox pull: acta-inbox.service last run failed (Result=exit-code)"},
+		{"old", "LoadState=loaded\nResult=success\nExecMainExitTimestamp=" + unix(2*time.Hour) + "\n", nil, "warn: inbox pull: last run 2h0m0s ago"},
+		{"never ran", "LoadState=loaded\nResult=success\nExecMainExitTimestamp=\n", nil, "warn: inbox pull: acta-inbox.service has not run yet"},
+		{"not installed", "LoadState=not-found\nResult=success\nExecMainExitTimestamp=\n", nil, "inbox pull: not configured (acta-inbox.service is not-found)"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e, out, _ := testEnv(t, nil)
+			e.command = fakeCommands(t, map[string]string{"systemctl": c.show}, nil)
+			mustRun(t, e, "doctor")
+			if got := out.String(); !strings.Contains(got, c.want) {
+				t.Fatalf("doctor %q, want %q", got, c.want)
+			}
+		})
+	}
+	// No systemctl, or no user manager: no inbox pull line at all.
+	for name, cmd := range map[string]func(string, ...string) (string, error){
+		"absent": fakeCommands(t, map[string]string{}, nil),
+		"fails":  fakeCommands(t, nil, map[string]error{"systemctl": errors.New("Failed to connect to bus")}),
+	} {
+		e, out, _ := testEnv(t, nil)
+		e.command = cmd
+		mustRun(t, e, "doctor")
+		if strings.Contains(out.String(), "inbox pull") {
+			t.Fatalf("%s: doctor %q", name, out.String())
+		}
 	}
 }
