@@ -1,5 +1,5 @@
 [Unit]
-Description=CORE & CRAFT: pull Duet envelope files from Drive and ingest them
+Description=CORE & CRAFT: the cursus publicus, pulling Duet (legati) envelope files from Drive and ingest them
 After=network-online.target
 Wants=network-online.target
 
