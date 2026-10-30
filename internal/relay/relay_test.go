@@ -212,3 +212,46 @@ func TestFireAny2xxIsDelivered(t *testing.T) {
 		}
 	}
 }
+
+// A redirect must not carry the private body (or the token) anywhere else:
+// a 307 or 308 is a failure, and the target is never asked.
+func TestFireDoesNotFollowRedirects(t *testing.T) {
+	for _, code := range []int{http.StatusTemporaryRedirect, http.StatusPermanentRedirect} {
+		var followed bool
+		mux := http.NewServeMux()
+		mux.HandleFunc("/elsewhere", func(w http.ResponseWriter, r *http.Request) {
+			followed = true
+			io.WriteString(w, `{"claude_code_session_id":"session_moved"}`)
+		})
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/elsewhere", code)
+		})
+		srv := httptest.NewServer(mux)
+		for _, hc := range []*http.Client{nil, srv.Client()} {
+			c := Client{HTTP: hc, BaseURL: srv.URL}
+			r := Route{URL: "https://api.anthropic.com/v1/claude_code/routines/trig_01ABC/fire", Token: "t"}
+			sess, err := c.Fire(context.Background(), r, "private")
+			if err == nil || followed || !strings.Contains(err.Error(), fmt.Sprint(code)) {
+				t.Errorf("%d (client %v): session %q, err %v, followed %v", code, hc != nil, sess, err, followed)
+			}
+		}
+		srv.Close()
+	}
+}
+
+// The trig_ id in the fire URL is half the secret: errors show the host only.
+func TestFireErrorsHideTheRoutine(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	base := srv.URL
+	srv.Close() // nothing listens: the POST fails in the transport
+	c := Client{BaseURL: base}
+	r := Route{URL: "https://api.anthropic.com/v1/claude_code/routines/trig_01SECRET/fire", Token: "t"}
+	_, err := c.Fire(context.Background(), r, "x")
+	if err == nil || strings.Contains(err.Error(), "trig_") || !strings.Contains(err.Error(), strings.TrimPrefix(base, "http://")) {
+		t.Fatalf("transport error %v", err)
+	}
+	_, err = c.Fire(context.Background(), Route{URL: "https://evil.dev/v1/claude_code/routines/trig_01SECRET/fire", Token: "t"}, "x")
+	if err == nil || strings.Contains(err.Error(), "trig_") || !strings.Contains(err.Error(), "evil.dev") {
+		t.Fatalf("foreign route error %v", err)
+	}
+}

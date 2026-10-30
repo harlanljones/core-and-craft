@@ -39,4 +39,4 @@ Each line below is one JSON item: {"event": <envelope v1 event acta logged>, "re
 {"event":{"id":"evt_…","kind":"checkin.answered","subject":"checkin:sleep-window-77aa",…,"data":{"text":"22:30 to 06:30"}},"re":{"kind":"checkin.asked","id":"evt_…","question":"What's your target sleep window?"}}
 ```
 
-Items go out in log order, at most 20 per fire. Any 2xx reply means the run started, so the items are recorded in `relay.json` with the reply's `claude_code_session_id` (or `unknown` when the reply names none) and never go again. A 429 (30 fires an hour per routine) leaves them waiting for the next run; any other status or error fails the unit and keeps them too.
+Items go out in log order, at most 20 per fire. Any 2xx reply means the run started, so the items are recorded in `relay.json` with the reply's `claude_code_session_id` (or `unknown` when the reply names none) and never go again. A 429 (30 fires an hour per routine) leaves them waiting for the next run; any other status or error fails the unit and keeps them too. A redirect is not followed: it fails like any other status. Errors name the host, never the routine's `trig_` id or the token.

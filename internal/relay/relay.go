@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -46,6 +47,16 @@ const MaxText = 65536
 const Header = "acta relay v1"
 
 var fireRe = regexp.MustCompile(`^https://api\.anthropic\.com/v1/claude_code/routines/trig_[A-Za-z0-9]+/fire$`)
+
+// hostOf returns the host of u, or "?" when u does not parse. Error text
+// uses it in place of a fire URL, whose trig_ id names the routine.
+func hostOf(u string) string {
+	p, err := url.Parse(u)
+	if err != nil || p.Host == "" {
+		return "?"
+	}
+	return p.Host
+}
 
 // ValidURL reports whether u is a routine fire URL on api.anthropic.com.
 func ValidURL(u string) bool { return fireRe.MatchString(u) }
@@ -271,32 +282,40 @@ type Client struct {
 // status is an error. Errors never include the token.
 func (c Client) Fire(ctx context.Context, r Route, text string) (string, error) {
 	if !ValidURL(r.URL) {
-		return "", fmt.Errorf("route %q is not a routine fire URL on %s", r.URL, Host)
+		return "", fmt.Errorf("route on %q is not a routine fire URL on %s", hostOf(r.URL), Host)
 	}
 	if r.Token == "" {
 		return "", errors.New("no token")
 	}
-	url := r.URL
+	target := r.URL
 	if c.BaseURL != "" {
-		url = c.BaseURL + strings.TrimPrefix(url, Host)
+		target = c.BaseURL + strings.TrimPrefix(target, Host)
 	}
 	body, err := json.Marshal(map[string]string{"text": text})
 	if err != nil {
 		return "", err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+r.Token)
 	req.Header.Set("anthropic-version", "2023-06-01")
 	req.Header.Set("Content-Type", "application/json")
-	hc := c.HTTP
-	if hc == nil {
-		hc = &http.Client{Timeout: 30 * time.Second}
+	hc := http.Client{Timeout: 30 * time.Second}
+	if c.HTTP != nil {
+		hc = *c.HTTP
 	}
+	// Never follow a redirect: a 307 or 308 would send the body (Harlan's
+	// words) and the token on to wherever it points. It fails as its status.
+	hc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	resp, err := hc.Do(req)
 	if err != nil {
+		// A *url.Error quotes the whole URL, trig_ id and all: keep the host.
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			return "", fmt.Errorf("fire: %s %s: %w", ue.Op, req.URL.Host, ue.Err)
+		}
 		return "", fmt.Errorf("fire: %w", err)
 	}
 	defer resp.Body.Close()

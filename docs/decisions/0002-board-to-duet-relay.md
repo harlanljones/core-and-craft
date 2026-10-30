@@ -26,7 +26,7 @@ Each pillar channel keeps one routine with no schedule, "Board relay", whose pro
 - **What comes back.** The agent answers a `pillar.asked` in its channel and also uploads a `pillar.answered` (same `ask:<slug>` subject) to the inbox, so the answer shows in the lot popup after the next pull.
 - **When.** `acta-relay.path` runs `acta relay` whenever the log changes; `acta-relay.timer` retries every 10 minutes. One fire per pillar per run, up to 20 items.
 - **State.** What was sent, and to which run, lives in `$ACTA_STATE/relay.json`, written after each fire. The log stays acta's alone and records nothing about delivery. The first run marks everything already in the log as sent, so installing never replays history.
-- **Secrets.** The URL must be `https://api.anthropic.com/v1/claude_code/routines/trig_.../fire`, or acta refuses to send the token. The token comes from `ACTA_RELAY_<PILLAR>_TOKEN` in a 0600 `relay.env`, or a systemd credential `relay-<pillar>`, and never appears in output or errors.
+- **Secrets.** The URL must be `https://api.anthropic.com/v1/claude_code/routines/trig_.../fire`, or acta refuses to send the token. The token comes from `ACTA_RELAY_<PILLAR>_TOKEN` in a 0600 `relay.env`, or a systemd credential `relay-<pillar>`, and never appears in output or errors. acta never follows a redirect (a 307 or 308 fails the fire, so the body and token go nowhere else), and a fire error names only the host, never the `trig_` id.
 
 Latency: the fire takes about a second; the channel's Claude starts within the minute and posts in the channel. An answer reaches the board on the next inbox pull, so within about 5 minutes.
 
