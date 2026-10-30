@@ -141,7 +141,7 @@ widget "town" {
     group.map(id => {"g": 0, "k": "poly", "fill": surface, "stroke": alpha(foreground, 0.16), "w": 1, "pts": [[get(spot, id)[0] * G - 0.16, get(spot, id)[1] * G - 0.16, 0], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G - 0.16, 0], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G + G2, 0], [get(spot, id)[0] * G - 0.16, get(spot, id)[1] * G + G2, 0]]})
   ])))
   // shallows: two wide, faint rings of lighter water at the cliff foot (g 4: the full map only, the tile would clip them)
-  let shallowOps = flatten([0.5, 0.22].map(e => ["career", "outlook", "relationships", "economic", "competence", "recovery", "agents", "faith", "time"].map(id => {"g": 4, "k": "poly", "fill": alpha(blue, e > 0.3 ? 0.07 : 0.11),
+  let shallowOps = flatten([0.5, 0.22].map(e => ["career", "outlook", "relationships", "economic", "competence", "recovery", "agents", "faith", "time"].map(id => {"g": e > 0.3 ? 4 : 5, "k": "poly", "fill": alpha(blue, e > 0.3 ? 0.07 : 0.11),
     "pts": [[get(spot, id)[0] * G - 0.16 - e, get(spot, id)[1] * G - 0.16 - e, -14], [get(spot, id)[0] * G + G2 + e, get(spot, id)[1] * G - 0.16 - e, -14],
             [get(spot, id)[0] * G + G2 + e, get(spot, id)[1] * G + G2 + e, -14], [get(spot, id)[0] * G - 0.16 - e, get(spot, id)[1] * G + G2 + e, -14]]})))
   // foam where the front cliffs meet the water
@@ -168,6 +168,14 @@ widget "town" {
       : phase == "dusk" ? [{"k": "circle", "fill": alpha(yellow, 0.55), "r": 11, "pts": [[545, 54]]}]
       : [{"k": "circle", "fill": alpha(yellow, 0.7), "r": 10, "pts": [[545, 30]]}],
     phase == "day" ? [] : range(night ? 46 : 12).map(k => {"k": "circle", "fill": alpha(foreground, 0.2 + hash("sa", k) * 0.35), "r": 0.6 + hash("sr", k) * 0.8, "pts": [[hash("sx", k) * 582, hash("sy", k) * 110]]}),
+    range(60).map(k => {"k": "line", "stroke": alpha(blue, 0.3), "w": 1, "pts": [[hash("wx", k) * 582, 40 + hash("wy", k) * 420], [hash("wx", k) * 582 + 6 + hash("wl", k) * 16, 40 + hash("wy", k) * 420]]})
+  ])
+  // the tile frames only the islands, so its sun or moon and stars sit inside that frame
+  let skyStill = flatten([
+    night ? [{"k": "circle", "fill": alpha(yellow, 0.85), "r": 9, "pts": [[530, 150]]}, {"k": "circle", "fill": background, "r": 8, "pts": [[534, 147]]}]
+      : phase == "dusk" ? [{"k": "circle", "fill": alpha(yellow, 0.55), "r": 10, "pts": [[530, 160]]}]
+      : [{"k": "circle", "fill": alpha(yellow, 0.7), "r": 9, "pts": [[530, 150]]}],
+    phase == "day" ? [] : range(night ? 26 : 8).map(k => {"k": "circle", "fill": alpha(foreground, 0.2 + hash("sa", k) * 0.35), "r": 0.6 + hash("sr", k) * 0.8, "pts": [[52 + hash("sx", k) * 490, 122 + hash("sy", k) * 90]]}),
     range(60).map(k => {"k": "line", "stroke": alpha(blue, 0.3), "w": 1, "pts": [[hash("wx", k) * 582, 40 + hash("wy", k) * 420], [hash("wx", k) * 582 + 6 + hash("wl", k) * 16, 40 + hash("wy", k) * 420]]})
   ])
   let rain = wx == "clear" ? [] : range(wx == "drizzle" ? 40 : 110).map(k => {"k": "line", "stroke": alpha(blue, 0.6), "w": 1.2, "pts": [[hash("rx", k) * 582, hash("ry", k) * 470], [hash("rx", k) * 582 - 4, hash("ry", k) * 470 + 9]]})
@@ -206,8 +214,8 @@ widget "town" {
   let scale = (screenWidth - 24) / 582
 
   // ---------------------------------------------------------------- the scene, front to back
-  let sceneStill = flatten([sky, proj.filter(d => d.g == 0), proj.filter(d => d.g == 2), rain])
-  let sceneFull = flatten([sky, proj.filter(d => d.g == 4), proj.filter(d => d.g == 0), proj.filter(d => d.g == 1), proj.filter(d => d.g == 2), proj.filter(d => d.g == 3), labelOps, rain])
+  let sceneStill = flatten([skyStill, proj.filter(d => d.g == 5), proj.filter(d => d.g == 0), proj.filter(d => d.g == 2), rain])
+  let sceneFull = flatten([sky, proj.filter(d => d.g == 4), proj.filter(d => d.g == 5), proj.filter(d => d.g == 0), proj.filter(d => d.g == 1), proj.filter(d => d.g == 2), proj.filter(d => d.g == 3), labelOps, rain])
 
   // The renderer: the same scene whole (still: false) or scaled down for the
   // tile (still: true), without the sailboats and labels.
@@ -237,10 +245,10 @@ widget "town" {
       }
       // The map is 582 x 470 px, scaled to the width. A still frames just the
       // islands (the sky above them is labels, left out at this size), centred.
-      let vx = still ? 62 : 0
-      let vy = still ? 130 : 0
-      let vw = still ? 520 : 582
-      let vh = still ? 340 : 470
+      let vx = still ? 46 : 0
+      let vy = still ? 116 : 0
+      let vw = still ? 536 : 582
+      let vh = still ? 368 : 470
       let k = still ? min(width / vw, height / vh) : width / vw
       translate((width - vw * k) / 2 - vx * k, still ? (height - vh * k) / 2 - vy * k : 0) {
         scale(k) {
