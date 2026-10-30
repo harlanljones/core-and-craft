@@ -1,0 +1,8 @@
+[Unit]
+Description=CORE & CRAFT: evening nudge and any check-in not yet announced
+
+[Service]
+Type=oneshot
+Environment=ACTA_DATA=%h/core-and-craft ACTA_STATE=%h/.local/state/core-and-craft
+Environment=ACTA_NOTIFY_CMD=/usr/share/omarchy/bin/omarchy-notification-send
+ExecStart=%h/.local/bin/acta notify

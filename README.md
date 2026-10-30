@@ -20,7 +20,7 @@ Monkeytype archiver:
 install -Dm600 /dev/null ~/.config/core-and-craft/monkeytype.env
 $EDITOR ~/.config/core-and-craft/monkeytype.env   # MONKEYTYPE_APE_KEY=...
 acta mt pull --all                               # one-time backfill
-make install-units                               # daily 23:30 pull + rebuild on change
+make install-units                               # daily 23:30 pull, rebuild on change, desktop notifications (first `acta notify` run only records a baseline)
 ```
 
 Board (Omarchy 4):
@@ -42,6 +42,7 @@ Create the ApeKey in Monkeytype's account settings and enable it. The key is rea
 | `acta ingest [file...]` | append inbox files from remote agents |
 | `acta snapshot` | rebuild `snapshot.json` |
 | `acta status [--json]` | one line for a bar widget |
+| `acta notify [--all]` | desktop notice for each new open check-in, new proposals (one notice) and, after 20:00, an unkept streak; once each, tracked in `notified.json`; first run records a baseline unless `--all`; `ACTA_NOTIFY_CMD` replaces `omarchy-notification-send` |
 | `acta doctor` | duplicate ids, seq gaps, future times, dangling corrections (these fail it); then `warn:` lines for the Drive inbox route: files in `inbox/rejected/`, an rclone `ccinbox` remote on rclone's shared Google Drive client_id, an `acta-inbox.service` run that failed or is over 30 min old (warnings keep exit 0; no network) |
 | `acta quest add --pillar P --title T [--priority N] [--every R] [--skill S --rule R]` | add a quest (active from you, proposed from any other `--agent`) |
 | `acta quest done\|undo\|accept\|decline\|drop <id>` | finish (undo retracts the latest done), approve or turn down a proposal, drop |
@@ -50,7 +51,7 @@ Create the ApeKey in Monkeytype's account settings and enable it. The key is rea
 | `acta checkin ask --pillar P --question Q`, `acta checkin answer <id> --text T` | a pillar's open question and your answer |
 | `acta rest [--at D]` | a rest day, which keeps the streak |
 
-Environment: `ACTA_DATA` (default `~/core-and-craft`), `ACTA_STATE` (default `~/.local/state/core-and-craft`), `ACTA_TZ` (default local).
+Environment: `ACTA_DATA` (default `~/core-and-craft`), `ACTA_STATE` (default `~/.local/state/core-and-craft`), `ACTA_TZ` (default local), `ACTA_NOTIFY_CMD` (default `omarchy-notification-send`).
 
 ## Layout
 
@@ -60,7 +61,7 @@ internal/event/       v1 envelope, validation, ids
 internal/store/       flock append, scanning
 internal/monkeytype/  ApeKey client and result mapping
 internal/snapshot/    fold into snapshot.json (gate, sustain, daily series, pillars)
-systemd/              user units: daily pull, Drive inbox pull, rebuild on change
+systemd/              user units: daily pull, Drive inbox pull, rebuild on change, evening notify
 board/plugin/         Omarchy 4 shell plugin: the board, vendored OWL runtime (owl/)
 board/test/           check.sh renders every widget under node against acta-built snapshots; taps.js drives the town's taps
 widgets/              OWL tiles the board shows (10-town.owl, 60-typing.owl)
