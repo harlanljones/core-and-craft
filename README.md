@@ -42,7 +42,7 @@ Create the ApeKey in Monkeytype's account settings and enable it. The key is rea
 | `acta ingest [file...]` | append inbox files from remote agents |
 | `acta snapshot` | rebuild `snapshot.json` |
 | `acta status [--json]` | one line for a bar widget |
-| `acta doctor` | duplicate ids, seq gaps, future times, dangling corrections |
+| `acta doctor` | duplicate ids, seq gaps, future times, dangling corrections (these fail it); then `warn:` lines for the Drive inbox route: files in `inbox/rejected/`, an rclone `ccinbox` remote on rclone's shared Google Drive client_id, an `acta-inbox.service` run that failed or is over 30 min old (warnings keep exit 0; no network) |
 | `acta quest add --pillar P --title T [--priority N] [--every R] [--skill S --rule R]` | add a quest (active from you, proposed from any other `--agent`) |
 | `acta quest done\|undo\|accept\|decline\|drop <id>` | finish (undo retracts the latest done), approve or turn down a proposal, drop |
 | `acta quest snooze <id> --until D`, `acta quest edit <id> ...` | hide until a day; change title, priority or recurrence |

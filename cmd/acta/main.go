@@ -8,7 +8,7 @@
 //	acta ingest [file...]       append inbox files written by remote agents
 //	acta snapshot               rebuild snapshot.json from the log
 //	acta status [--json]        one line for a bar widget
-//	acta doctor                 check the log's invariants
+//	acta doctor                 check the log's invariants and the inbox route
 //	acta quest <command>        add, finish, undo, accept, decline, drop, snooze, edit, list
 //	acta checkin ask|answer     a pillar question and its answer
 //	acta rest [--at D]          a rest day: keeps the streak
@@ -45,6 +45,9 @@ type env struct {
 	stderr      io.Writer
 	getenv      func(string) string
 	mtBaseURL   string
+	// command runs an external program and returns its stdout (doctor's
+	// rclone and systemctl checks). nil means no external programs.
+	command func(name string, args ...string) (string, error)
 }
 
 func (e env) logPath() string      { return filepath.Join(e.data, store.FileName) }
@@ -75,7 +78,7 @@ func defaultEnv() (env, error) {
 			loc = l
 		}
 	}
-	return env{data: data, state: state, loc: loc, now: time.Now, stdout: os.Stdout, stderr: os.Stderr, getenv: os.Getenv}, nil
+	return env{data: data, state: state, loc: loc, now: time.Now, stdout: os.Stdout, stderr: os.Stderr, getenv: os.Getenv, command: runCommand}, nil
 }
 
 func main() {
@@ -536,7 +539,21 @@ func statusLine(s snapshot.Snapshot) string {
 	return fmt.Sprintf("%d events today", s.Today.Events)
 }
 
+// cmdDoctor checks the log's invariants, then the Duet inbox route. Only log
+// problems fail the command; route findings are printed as warn: lines.
 func cmdDoctor(e env) error {
+	err := doctorLog(e)
+	r := checkRoute(e)
+	for _, l := range r.lines {
+		fmt.Fprintln(e.stdout, l)
+	}
+	if r.warns > 0 {
+		fmt.Fprintf(e.stdout, "doctor: %d warning(s)\n", r.warns)
+	}
+	return err
+}
+
+func doctorLog(e env) error {
 	f, err := os.Open(e.logPath())
 	if errors.Is(err, os.ErrNotExist) {
 		fmt.Fprintln(e.stdout, "doctor: no log yet")
