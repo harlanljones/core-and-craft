@@ -388,7 +388,7 @@ widget "town" {
             Text { text: "Legatus · ask ${selLot.title ?? ""}'s agent"; style: small; font: mono; color: muted; maxLines: 1 }
             if lotAsk != null {
               Text { text: "you: ${lotAsk.text ?? ""}"; style: small; font: mono; color: muted; maxLines: 2 }
-              Text { text: lotAsk.open == true ? "sent · waiting for the answer" : lotAsk.answer ?? ""; style: small; font: mono; color: lotAsk.open == true ? muted : foreground; maxLines: 4 }
+              Text { text: lotAsk.open == true ? "waiting for the answer" : lotAsk.answer ?? ""; style: small; font: mono; color: lotAsk.open == true ? muted : foreground; maxLines: 4 }
             }
             if selLot != null {
               Row {
