@@ -86,6 +86,9 @@ widget "town" {
   // fill / stroke / w / r. The Canvas only walks the list.
   let dashEdges = [[0.05, 0.05, 0.95, 0.05], [0.95, 0.05, 0.95, 0.95], [0.95, 0.95, 0.05, 0.95], [0.05, 0.95, 0.05, 0.05]]
   let tower = lots2.map(l => flatten([
+    // a soft shadow thrown to the front right of each tower
+    [{"k": "poly", "fill": alpha(background, 0.45), "pts": [[l.fe, l.fj, 0], [l.fe + 0.3, l.fj + 0.12, 0], [l.fe + 0.3, l.fn + 0.12, 0], [l.fe, l.fn, 0]]},
+     {"k": "poly", "fill": alpha(background, 0.45), "pts": [[l.fi, l.fn, 0], [l.fe, l.fn, 0], [l.fe + 0.3, l.fn + 0.12, 0], [l.fi + 0.3, l.fn + 0.12, 0]]}],
     // Castra's frame: a dashed diamond
     flatten(dashEdges.map(e => range(5).map(k => {"k": "line", "w": 1.2, "stroke": muted,
       "pts": [[l.i + e[0] + (e[2] - e[0]) * (k / 5 + 0.03), l.j + e[1] + (e[3] - e[1]) * (k / 5 + 0.03), 0], [l.i + e[0] + (e[2] - e[0]) * (k / 5 + 0.13), l.j + e[1] + (e[3] - e[1]) * (k / 5 + 0.13), 0]]}))),
@@ -96,6 +99,10 @@ widget "town" {
     [{"k": "poly", "fill": muted, "pts": [[l.fi, l.fn, 0], [l.fe, l.fn, 0], [l.fe, l.fn, l.hgt], [l.fi, l.fn, l.hgt]]},
      {"k": "poly", "fill": alpha(muted, 0.55), "pts": [[l.fe, l.fn, 0], [l.fe, l.fj, 0], [l.fe, l.fj, l.hgt], [l.fe, l.fn, l.hgt]]},
      {"k": "poly", "fill": surface, "stroke": muted, "w": 1, "pts": [[l.fi, l.fn, l.hgt], [l.fe, l.fn, l.hgt], [l.fe, l.fj, l.hgt], [l.fi, l.fj, l.hgt]]}],
+    // a warm glow behind each lit window
+    flatten(range(l.storeys).map(sx => range(2).filter(w => sx * 2 + w < l.today).map(w => {"k": "poly", "fill": alpha(yellow, 0.22),
+      "pts": [[l.fi + (l.fe - l.fi) * (w == 0 ? 0.3 : 0.7), l.fn, 9 + sx * 14, -5.5, -2.5], [l.fi + (l.fe - l.fi) * (w == 0 ? 0.3 : 0.7), l.fn, 9 + sx * 14, 5.5, 2.5],
+              [l.fi + (l.fe - l.fi) * (w == 0 ? 0.3 : 0.7), l.fn, 9 + sx * 14, 5.5, -6.5], [l.fi + (l.fe - l.fi) * (w == 0 ? 0.3 : 0.7), l.fn, 9 + sx * 14, -5.5, -9.5]]}))),
     // two windows a storey on the left face, one lit per event today
     flatten(range(l.storeys).map(sx => range(2).map(w => {"k": "poly", "fill": sx * 2 + w < l.today ? yellow : alpha(background, 0.7),
       "pts": [[l.fi + (l.fe - l.fi) * (w == 0 ? 0.3 : 0.7), l.fn, 9 + sx * 14, -3, -1.5], [l.fi + (l.fe - l.fi) * (w == 0 ? 0.3 : 0.7), l.fn, 9 + sx * 14, 3, 1.5],
@@ -129,11 +136,12 @@ widget "town" {
       {"g": 0, "k": "poly", "fill": alpha(muted, 0.9), "pts": [[get(spot, id)[0] * G - 0.16, get(spot, id)[1] * G + G2, 0], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G + G2, 0], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G + G2, -14], [get(spot, id)[0] * G - 0.16, get(spot, id)[1] * G + G2, -14]]},
       {"g": 0, "k": "poly", "fill": alpha(muted, 0.55), "pts": [[get(spot, id)[0] * G + G2, get(spot, id)[1] * G + G2, 0], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G - 0.16, 0], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G - 0.16, -14], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G + G2, -14]]}])),
     // ...then the grown diamonds
-    group.map(id => {"g": 0, "k": "poly", "fill": surface, "pts": [[get(spot, id)[0] * G - 0.16, get(spot, id)[1] * G - 0.16, 0], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G - 0.16, 0], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G + G2, 0], [get(spot, id)[0] * G - 0.16, get(spot, id)[1] * G + G2, 0]]})
+    group.map(id => {"g": 0, "k": "poly", "fill": surface, "stroke": alpha(foreground, 0.16), "w": 1, "pts": [[get(spot, id)[0] * G - 0.16, get(spot, id)[1] * G - 0.16, 0], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G - 0.16, 0], [get(spot, id)[0] * G + G2, get(spot, id)[1] * G + G2, 0], [get(spot, id)[0] * G - 0.16, get(spot, id)[1] * G + G2, 0]]})
   ])))
   // the bridge is yellow while today is kept, muted otherwise, with 5 planks
   let bridgeOps = flatten([
     [{"g": 0, "k": "poly", "fill": alpha(streak.today == true ? yellow : muted, 0.85), "pts": [[b0, oj + 0.38, 0], [b1, aj + 0.38, 0], [b1, aj + 0.62, 0], [b0, oj + 0.62, 0]]}],
+    [oj + 0.38, oj + 0.62].map(y => {"g": 0, "k": "line", "stroke": alpha(foreground, 0.4), "w": 1.2, "pts": [[b0, y, 3], [b1, y, 3]]}),
     range(1, 6).map(k => {"g": 0, "k": "line", "stroke": alpha(background, 0.6), "w": 1.2, "pts": [[b0 + (b1 - b0) * k / 6, oj + 0.38, 0], [b0 + (b1 - b0) * k / 6, oj + 0.62, 0]]})
   ])
   // a sailboat per proposal, moored off the front of its pillar's lot
@@ -151,7 +159,7 @@ widget "town" {
       : phase == "dusk" ? [{"k": "circle", "fill": alpha(yellow, 0.55), "r": 11, "pts": [[545, 54]]}]
       : [{"k": "circle", "fill": alpha(yellow, 0.7), "r": 10, "pts": [[545, 30]]}],
     phase == "day" ? [] : range(night ? 46 : 12).map(k => {"k": "circle", "fill": alpha(foreground, 0.2 + hash("sa", k) * 0.35), "r": 0.6 + hash("sr", k) * 0.8, "pts": [[hash("sx", k) * 582, hash("sy", k) * 110]]}),
-    range(60).map(k => {"k": "line", "stroke": alpha(blue, 0.3), "w": 1, "pts": [[hash("wx", k) * 582, 40 + hash("wy", k) * 420], [hash("wx", k) * 582 + 10, 40 + hash("wy", k) * 420]]})
+    range(60).map(k => {"k": "line", "stroke": alpha(blue, 0.3), "w": 1, "pts": [[hash("wx", k) * 582, 40 + hash("wy", k) * 420], [hash("wx", k) * 582 + 6 + hash("wl", k) * 16, 40 + hash("wy", k) * 420]]})
   ])
   let rain = wx == "clear" ? [] : range(wx == "drizzle" ? 40 : 110).map(k => {"k": "line", "stroke": alpha(blue, 0.6), "w": 1.2, "pts": [[hash("rx", k) * 582, hash("ry", k) * 470], [hash("rx", k) * 582 - 4, hash("ry", k) * 470 + 9]]})
 
