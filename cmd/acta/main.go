@@ -49,6 +49,7 @@ type env struct {
 
 func (e env) logPath() string      { return filepath.Join(e.data, store.FileName) }
 func (e env) inboxDir() string     { return filepath.Join(e.data, "inbox") }
+func (e env) rejectedDir() string  { return filepath.Join(e.inboxDir(), "rejected") }
 func (e env) snapshotPath() string { return filepath.Join(e.state, snapshot.FileName) }
 
 func defaultEnv() (env, error) {
@@ -325,7 +326,8 @@ func appendOne(e env, ev event.Event) error {
 }
 
 // readInbox parses one inbox file. Lines may omit id (acta computes it) and
-// must omit or ignore seq (acta assigns it). Any bad line rejects the file.
+// must omit or ignore seq (acta assigns it). Any bad line rejects the file;
+// cmdIngest then moves it to inbox/rejected/ (see quarantine).
 func readInbox(path string) ([]event.Event, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -389,13 +391,22 @@ func cmdIngest(e env, args []string) error {
 		sort.Strings(matches)
 		files = matches
 	}
-	var failed []string
+	var failed, moved []string
 	total, dups := 0, 0
 	for _, p := range files {
 		evs, err := readInbox(p)
 		if err != nil {
-			fmt.Fprintf(e.stderr, "acta: %s rejected:\n%v\n", filepath.Base(p), err)
+			msg := fmt.Sprintf("%s rejected:\n%v\n", filepath.Base(p), err)
+			fmt.Fprintf(e.stderr, "acta: %s", msg)
 			failed = append(failed, filepath.Base(p))
+			if fromInbox && !*keep {
+				dst, qerr := quarantine(e.rejectedDir(), p, msg)
+				if qerr != nil {
+					return qerr
+				}
+				moved = append(moved, filepath.Base(dst))
+				fmt.Fprintf(e.stderr, "acta: moved %s to inbox/rejected/%s\n", filepath.Base(p), filepath.Base(dst))
+			}
 			continue
 		}
 		res, err := store.Append(e.logPath(), evs)
@@ -412,9 +423,58 @@ func cmdIngest(e env, args []string) error {
 	}
 	fmt.Fprintf(e.stdout, "ingest: %d file(s), %d new, %d already logged\n", len(files)-len(failed), total, dups)
 	if len(failed) > 0 {
-		return fmt.Errorf("%d file(s) rejected and left in place: %s", len(failed), strings.Join(failed, ", "))
+		where := "left in place"
+		if len(moved) > 0 {
+			where = "moved to inbox/rejected"
+		}
+		return fmt.Errorf("%d file(s) rejected and %s: %s", len(failed), where, strings.Join(failed, ", "))
 	}
 	return nil
+}
+
+// quarantine moves a rejected inbox file into dir and writes the rejection
+// text next to it as <name>.err. It never overwrites: if the name is taken it
+// tries <base>-1<ext>, <base>-2<ext>, ... The file is hard-linked into place
+// (link fails if the target exists) and only then removed from the inbox, so
+// it is never lost.
+func quarantine(dir, src, msg string) (string, error) {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	name := filepath.Base(src)
+	ext := filepath.Ext(name)
+	base := strings.TrimSuffix(name, ext)
+	for n := 0; ; n++ {
+		cand := name
+		if n > 0 {
+			cand = fmt.Sprintf("%s-%d%s", base, n, ext)
+		}
+		dst := filepath.Join(dir, cand)
+		if _, err := os.Lstat(dst + ".err"); err == nil {
+			continue
+		}
+		if err := os.Link(src, dst); err != nil {
+			if errors.Is(err, os.ErrExist) {
+				continue
+			}
+			return "", err
+		}
+		f, err := os.OpenFile(dst+".err", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+		if err != nil {
+			return "", err
+		}
+		_, werr := io.WriteString(f, msg)
+		if cerr := f.Close(); werr == nil {
+			werr = cerr
+		}
+		if werr != nil {
+			return "", werr
+		}
+		if err := os.Remove(src); err != nil {
+			return "", err
+		}
+		return dst, nil
+	}
 }
 
 func cmdSnapshot(e env) error {
