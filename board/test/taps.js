@@ -153,6 +153,21 @@ sc = w.screen(); byText(sc, 'later')[0].h.onTap(); ok(w.pop() === '' && w.take()
 w.setPop('ask:' + c0.id)
 sc = w.screen(); byText(sc, 'send')[0].h.onTap()
 ok(JSON.stringify(w.take()) === JSON.stringify([['run', `acta checkin answer ${ID(c0.id)} --text '22:30 to 06:30  it'\\''s fine' ${board}`]]), 'check-in send', JSON.stringify(acts))
+// an answer with quotes and $(...) stays one quoted word; an empty one runs nothing
+{
+  const evil = `a "b" 'c' $(touch /tmp/pwned) \`id\`; rm -rf x`
+  w.setPop('ask:' + c0.id)
+  find(w.screen().children, n => n.kind === 'Input' && n.p.placeholder === 'your answer')[0].h.onChange(evil)
+  byText(w.screen(), 'send')[0].h.onTap()
+  const got = w.take()
+  const q = "'" + evil.replace(/'/g, "'\\''") + "'"
+  ok(JSON.stringify(got) === JSON.stringify([['run', `acta checkin answer ${ID(c0.id)} --text ${q} ${board}`]]), 'check-in injection stays quoted', JSON.stringify(got))
+  ok(w.pop() === '', 'check-in send closes the popup')
+  w.setPop('ask:' + c0.id)
+  find(w.screen().children, n => n.kind === 'Input' && n.p.placeholder === 'your answer')[0].h.onChange('   ')
+  byText(w.screen(), 'send')[0].h.onTap()
+  ok(w.take().length === 0 && w.pop() === 'ask:' + c0.id, 'empty answer runs nothing and stays open')
+}
 w.setPop('')
 
 // the Input: #Pillar picks the pillar, quoting keeps the title whole
