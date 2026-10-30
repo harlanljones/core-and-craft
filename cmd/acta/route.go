@@ -143,7 +143,9 @@ func errReason(path string) string {
 }
 
 // checkClientID reads rclone.conf (no network) and warns when the ccinbox
-// remote has no client_id of its own, so it uses rclone's shared one.
+// remote has no client_id of its own, so it uses rclone's shared one. A
+// remote that uses a service account needs no client_id: it passes, and its
+// key file must exist and not be readable by others.
 func checkClientID(e env, r *routeReport) {
 	out, err := e.runExt("rclone", "config", "file")
 	if errors.Is(err, exec.ErrNotFound) {
@@ -170,6 +172,23 @@ func checkClientID(e env, r *routeReport) {
 	}
 	if !found {
 		r.ok("rclone: not configured (no [%s] remote in %s)", inboxRemote, path)
+		return
+	}
+	// A service account needs no OAuth client: the folder is shared with it.
+	if creds := strings.TrimSpace(section["service_account_credentials"]); creds != "" {
+		r.ok("rclone: ok, remote %s uses a service account", inboxRemote)
+		return
+	}
+	if sa := strings.TrimSpace(section["service_account_file"]); sa != "" {
+		fi, err := os.Stat(sa)
+		switch {
+		case err != nil:
+			r.warn("rclone: remote %s service account file %s: %v", inboxRemote, sa, err)
+		case fi.Mode().Perm()&0o077 != 0:
+			r.warn("rclone: service account key %s is readable by others (mode %o); chmod 600 it", sa, fi.Mode().Perm())
+		default:
+			r.ok("rclone: ok, remote %s uses a service account", inboxRemote)
+		}
 		return
 	}
 	if strings.TrimSpace(section["client_id"]) == "" {
@@ -220,7 +239,7 @@ func iniSection(path, name string) (map[string]string, bool, error) {
 // checkInboxPull reads the last result of acta-inbox.service. No systemctl
 // (or no user manager) means no line at all.
 func checkInboxPull(e env, r *routeReport) {
-	out, err := e.runExt("systemctl", "--user", "show", inboxUnit, "--timestamp=unix", "-p", "ExecMainExitTimestamp,Result,LoadState")
+	out, err := e.runExt("systemctl", "--user", "show", inboxUnit, "--timestamp=unix", "-p", "ExecMainExitTimestamp,Result,LoadState,ActiveState")
 	if err != nil {
 		return
 	}
@@ -232,6 +251,11 @@ func checkInboxPull(e env, r *routeReport) {
 	}
 	if s := props["LoadState"]; s != "" && s != "loaded" {
 		r.ok("inbox pull: not configured (%s is %s)", inboxUnit, s)
+		return
+	}
+	// A running oneshot has no exit timestamp yet; that is not "never ran".
+	if st := props["ActiveState"]; st == "active" || st == "activating" {
+		r.ok("inbox pull: running now")
 		return
 	}
 	if res := props["Result"]; res != "" && res != "success" {

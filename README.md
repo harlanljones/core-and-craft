@@ -43,7 +43,7 @@ Create the ApeKey in Monkeytype's account settings and enable it. The key is rea
 | `acta snapshot` | rebuild `snapshot.json` |
 | `acta status [--json]` | one line for a bar widget |
 | `acta notify [--all]` | desktop notice for each new open check-in, new proposals (one notice) and, after 20:00, an unkept streak; once each, tracked in `notified.json`; first run records a baseline unless `--all`; `ACTA_NOTIFY_CMD` replaces `omarchy-notification-send` |
-| `acta doctor` | duplicate ids, seq gaps, future times, dangling corrections (these fail it); then `warn:` lines for the Drive inbox route: files in `inbox/rejected/`, an rclone `ccinbox` remote on rclone's shared Google Drive client_id, an `acta-inbox.service` run that failed or is over 30 min old (warnings keep exit 0; no network) |
+| `acta doctor` | duplicate ids, seq gaps, future times, dangling corrections (these fail it); then `warn:` lines for the Drive inbox route: files in `inbox/rejected/`, an rclone `ccinbox` remote on rclone's shared Google Drive client_id (a remote with a `service_account_file` passes if the key file exists and is mode 600), an `acta-inbox.service` run that failed or is over 30 min old (warnings keep exit 0; no network) |
 | `acta quest add --pillar P --title T [--priority N] [--every R] [--skill S --rule R]` | add a quest (active from you, proposed from any other `--agent`) |
 | `acta quest done\|undo\|accept\|decline\|drop <id>` | finish (undo retracts the latest done), approve or turn down a proposal, drop |
 | `acta quest snooze <id> --until D`, `acta quest edit <id> ...` | hide until a day; change title, priority or recurrence |
