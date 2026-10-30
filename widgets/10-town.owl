@@ -177,8 +177,8 @@ widget "town" {
     ]))),
     [{"k": "text", "x": 14, "y": 20, "size": 12, "align": "start", "color": muted, "text": "C.O.R.E."},
      {"k": "text", "x": 330, "y": 20, "size": 12, "align": "start", "color": muted, "text": "C.R.A.F.T."},
-     {"k": "text", "x": bmx + 4, "y": bmy + 26, "size": 12, "align": "center", "color": foreground, "text": "streak ${streak.days ?? 0}"},
-     {"k": "text", "x": bmx + 4, "y": bmy + 39, "size": 12, "align": "center", "color": streak.today == true ? green : accent, "text": streak.today == true ? "today kept" : "rest day ›"}]
+     {"k": "text", "x": bmx - 78, "y": bmy + 2, "size": 12, "align": "center", "color": foreground, "text": "streak ${streak.days ?? 0}"},
+     {"k": "text", "x": bmx - 78, "y": bmy + 15, "size": 12, "align": "center", "color": streak.today == true ? green : accent, "text": streak.today == true ? "today kept" : "rest day ›"}]
   ])
   // taps, in the same px: boats, rest day, ? bubbles, then lots
   let boatBox = range(len(props)).map(k => {"n": k,
@@ -211,7 +211,7 @@ widget "town" {
             pop = "prop:" + get(props, boat.n).id
           } else if ask != null {
             pop = "ask:" + ask.id
-          } else if streak.today != true && X >= bmx - 36 && X <= bmx + 44 && Y >= bmy + 30 && Y <= bmy + 48 {
+          } else if streak.today != true && X >= bmx - 118 && X <= bmx - 38 && Y >= bmy + 10 && Y <= bmy + 26 {
             run("acta rest --via board")
           } else if lot != null {
             pop = "lot:" + lot.id
@@ -372,7 +372,7 @@ widget "town" {
               opacity: flash == q.id ? 0.35 : 1
               animate opacity: tween(0.15)
               Row {
-                gap: 6
+                gap: 2
                 fill: width
                 align: center
                 Text { text: i == 0 ? "@" : "${i + 1}"; style: small; font: mono; bold: true; color: accent }
@@ -429,7 +429,7 @@ widget "town" {
             Row {
               gap: 6
               fill: width
-              Text { text: "◇ ${len(props)} proposed, moored off the islands"; style: small; font: mono; color: cyan; weight: 1; maxLines: 1 }
+              Text { text: "◇ ${len(props)} proposed, moored"; style: small; font: mono; color: cyan; weight: 1; maxLines: 1 }
               Text { text: "review"; style: small; font: mono; color: cyan; padding: 1; onTap: pop = "prop:" + first(props).id }
             }
           }
@@ -457,7 +457,7 @@ widget "town" {
           }
         }
         Column {
-          width: 141
+          width: 148
           gap: 4
           Text { text: "Gradus · level"; style: small; font: mono; color: muted }
           Row {
@@ -473,7 +473,9 @@ widget "town" {
           } else {
             Text { text: "rest day ›"; style: small; font: mono; color: accent; padding: 0; onTap: run("acta rest --via board") }
           }
-          Sparkline { values: s.history ?? []; color: accent; height: 28 }
+          if any(s.history ?? [], v => v > 0) {
+            Sparkline { values: s.history ?? []; color: accent; height: 28 }
+          }
           Text { text: "Rogationes · check-ins"; style: small; font: mono; color: muted; maxLines: 1 }
           if len(asks) > 0 {
             Text { text: "? ${len(asks)} waiting"; style: small; font: mono; color: magenta; padding: 0; onTap: pop = "ask:" + first(asks).id }
