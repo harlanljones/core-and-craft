@@ -183,3 +183,32 @@ func TestStateRoundTrip(t *testing.T) {
 		t.Fatalf("reload: %+v %v %v", back, found, err)
 	}
 }
+
+// Any 2xx means the run started. A body without a session id still counts,
+// or the items would go again on every run.
+func TestFireAny2xxIsDelivered(t *testing.T) {
+	for _, tc := range []struct {
+		status int
+		body   string
+		want   string
+	}{
+		{http.StatusCreated, `{"claude_code_session_id":"session_201"}`, "session_201"},
+		{http.StatusAccepted, `{"claude_code_session_id":"session_202"}`, "session_202"},
+		{http.StatusAccepted, ``, SessionUnknown},
+		{http.StatusOK, ``, SessionUnknown},
+		{http.StatusOK, `{}`, SessionUnknown},
+		{http.StatusOK, `not json`, SessionUnknown},
+	} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(tc.status)
+			io.WriteString(w, tc.body)
+		}))
+		c := Client{HTTP: srv.Client(), BaseURL: srv.URL}
+		r := Route{URL: "https://api.anthropic.com/v1/claude_code/routines/trig_01ABC/fire", Token: "t"}
+		sess, err := c.Fire(context.Background(), r, "hello")
+		srv.Close()
+		if err != nil || sess != tc.want {
+			t.Errorf("%d %q: got %q, %v; want %q", tc.status, tc.body, sess, err, tc.want)
+		}
+	}
+}

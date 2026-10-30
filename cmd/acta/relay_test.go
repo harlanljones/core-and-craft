@@ -185,3 +185,31 @@ func TestRelayTokenFromCredential(t *testing.T) {
 		t.Fatalf("credential relay %q", got)
 	}
 }
+
+// A 202 with no body still started the run: the item is recorded, not resent.
+func TestRelayRecordsA2xxWithoutSession(t *testing.T) {
+	f, srv := newFireServer(t)
+	vars := map[string]string{"ACTA_RELAY_TIME": fireURL("trig_tim"), "ACTA_RELAY_TIME_TOKEN": relayToken}
+	e, _, _ := testEnv(t, vars)
+	e.relayBaseURL = srv.URL
+	mustRun(t, e, "init")
+	mustRun(t, e, "relay")
+	mustRun(t, e, "ask", "--pillar", "time", "--text", "Which meeting can go?")
+	f.status = http.StatusAccepted
+	if got := runOut(t, e, "relay"); !strings.Contains(got, "time: sent 1, unknown") {
+		t.Fatalf("202 %q", got)
+	}
+	f.status = 0
+	if got := runOut(t, e, "relay"); strings.Contains(got, "sent") {
+		t.Fatalf("resent after a 202: %q", got)
+	}
+	st, _, _ := relay.Load(e.relayPath())
+	if len(st.Sent) != 1 {
+		t.Fatalf("relay.json %+v", st)
+	}
+	for _, s := range st.Sent {
+		if s.Session != relay.SessionUnknown || s.To != "time" {
+			t.Fatalf("recorded %+v", s)
+		}
+	}
+}

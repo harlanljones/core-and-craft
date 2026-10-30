@@ -162,6 +162,10 @@ func Batch(to string, items []Item) ([]Item, string, error) {
 	return nil, "", nil
 }
 
+// SessionUnknown is recorded for a fire that got a 2xx whose body named no
+// session: the run started, so the items must not go again.
+const SessionUnknown = "unknown"
+
 // Sent records one delivered event.
 type Sent struct {
 	At      string `json:"at"`
@@ -262,8 +266,9 @@ type Client struct {
 	BaseURL string
 }
 
-// Fire POSTs text to the route and returns the session the run started.
-// Errors never include the token.
+// Fire POSTs text to the route and returns the session the run started, or
+// SessionUnknown for a 2xx that names none. A 429 is RateLimited; any other
+// status is an error. Errors never include the token.
 func (c Client) Fire(ctx context.Context, r Route, text string) (string, error) {
 	if !ValidURL(r.URL) {
 		return "", fmt.Errorf("route %q is not a routine fire URL on %s", r.URL, Host)
@@ -299,7 +304,7 @@ func (c Client) Fire(ctx context.Context, r Route, text string) (string, error) 
 	if resp.StatusCode == http.StatusTooManyRequests {
 		return "", RateLimited{RetryAfter: resp.Header.Get("Retry-After")}
 	}
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		var e struct {
 			Error struct {
 				Type    string `json:"type"`
@@ -312,11 +317,13 @@ func (c Client) Fire(ctx context.Context, r Route, text string) (string, error) 
 		}
 		return "", fmt.Errorf("fire: HTTP %d", resp.StatusCode)
 	}
+	// Any 2xx means the run started. Without a session id in the body it is
+	// still delivered: an error here would send the same items on every run.
 	var ok struct {
 		Session string `json:"claude_code_session_id"`
 	}
-	if err := json.Unmarshal(raw, &ok); err != nil || ok.Session == "" {
-		return "", fmt.Errorf("fire: unexpected reply %.200q", raw)
+	if json.Unmarshal(raw, &ok) != nil || ok.Session == "" {
+		return SessionUnknown, nil
 	}
 	return ok.Session, nil
 }
