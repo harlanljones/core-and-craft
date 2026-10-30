@@ -6,13 +6,18 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 Environment=ACTA_DATA=%h/core-and-craft ACTA_STATE=%h/.local/state/core-and-craft
-# Remote `ccinbox:` is the Drive folder "core-and-craft inbox"; its token lives
-# in ~/.config/rclone/rclone.conf (rclone refreshes it, so the file must stay writable).
-# rclone writes <name>.<rand>.partial and renames it when whole, so acta's
-# `*.jsonl` glob never sees a half-copied file.
-ExecStart=%h/.local/bin/rclone move ccinbox: %h/core-and-craft/inbox/ --include "*.jsonl" --drive-skip-gdocs
-# A rejected file moves to inbox/rejected/ (reason in <name>.err) and fails this run of
-# the unit, so it shows in `systemctl --user status`; later runs do not retry it.
-ExecStartPost=%h/.local/bin/acta ingest
+# Remote `ccinbox:` is the Drive folder "core-and-craft inbox", shared with a
+# Google service account (key and remote in ~/.config/rclone/rclone.conf).
+# The service account can read the folder but cannot delete files it does not
+# own (403 insufficientFilePermissions), so `rclone move` copied the files and
+# then failed, and the ingest step never ran. `acta inbox pull` only reads
+# Drive: it runs `rclone lsjson` and `rclone copyto` (rclone from PATH or
+# ~/.local/bin), fetches each Drive file ID once (seen IDs are kept in
+# $ACTA_STATE/inbox-seen.json), then ingests inbox/ like `acta ingest`.
+# Files stay in Drive; delete old ones there by hand.
+# A failed listing or copy, or a rejected file (moved to inbox/rejected/ with
+# the reason in <name>.err), fails this run of the unit, so it shows in
+# `systemctl --user status` and `acta doctor`; a rejected file is not fetched again.
+ExecStart=%h/.local/bin/acta inbox pull
 NoNewPrivileges=yes
 PrivateTmp=yes

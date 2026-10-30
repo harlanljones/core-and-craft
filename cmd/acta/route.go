@@ -1,8 +1,9 @@
 package main
 
 // The Duet-to-acta inbox route: Drive folder -> rclone remote ccinbox ->
-// acta-inbox.service -> inbox/ -> acta ingest. doctor checks each hop it can
-// see without the network, so a failure shows before the route goes quiet.
+// acta-inbox.service (acta inbox pull: copy new files, then ingest) ->
+// inbox/. doctor checks each hop it can see without the network, so a
+// failure shows before the route goes quiet.
 
 import (
 	"bufio"

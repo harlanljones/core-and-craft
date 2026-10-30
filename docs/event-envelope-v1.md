@@ -65,12 +65,18 @@ Cloud agents (Claude Duet channels) can't take the lock. They write whole files 
 
 ### Duet route: Drive to inbox
 
-Duet channels run in the cloud and save finished files to the Google Drive folder "core-and-craft inbox" (raw `.jsonl`, not converted to a Google Doc). On the desktop, `acta-inbox.timer` runs `acta-inbox.service` every 5 minutes. The service does two steps:
+Duet channels run in the cloud and save finished files to the Google Drive folder "core-and-craft inbox" (raw `.jsonl`, not converted to a Google Doc). On the desktop, `acta-inbox.timer` runs `acta-inbox.service` every 5 minutes. The service runs `acta inbox pull`, which does these steps:
 
-1. `rclone move ccinbox: ~/core-and-craft/inbox/ --include "*.jsonl" --drive-skip-gdocs` moves the files and deletes them from Drive. rclone writes `<name>.<rand>.partial` and renames it when the copy is whole. `acta ingest` globs only `*.jsonl`, so it never reads a partial file.
-2. `acta ingest` validates and appends them, as above.
+1. `rclone lsjson ccinbox: --files-only --include "*.jsonl" --drive-skip-gdocs` lists the folder. If the listing fails, acta changes nothing and exits 1.
+2. For each Drive file ID that is not in `$ACTA_STATE/inbox-seen.json`, `rclone copyto ccinbox:<name> ...` copies the file into `inbox/`. rclone writes to a hidden temp name that the `*.jsonl` glob ignores, then acta links it into place. acta never overwrites a local file: if `inbox/<name>` exists with different bytes, the copy is `<base>.<first 8 chars of the ID>.jsonl`. A name with a path separator, or one that does not end in `.jsonl`, is refused. acta records the ID right after each copy. A failed copy is not recorded, so the next run tries it again; the other files continue and the run exits 1.
+3. IDs that are no longer in Drive are removed from `inbox-seen.json`, so the file stays small.
+4. acta ingests `inbox/` exactly as `acta ingest` does, as above.
 
-One-time setup: `rclone config create ccinbox drive scope=drive root_folder_id=<folder id>` and sign in with the folder owner's Google account. The token stays in `~/.config/rclone/rclone.conf`. A file that fails validation moves to `inbox/rejected/` with a `.err` file and fails that run of the unit; read the reason in the `.err` file or with `journalctl --user -u acta-inbox`.
+The folder is only read. acta never moves or deletes a file in Drive, so the files stay there; delete old ones in Drive by hand when you want. (The remote uses a Google service account. It can read the shared folder but cannot delete files it does not own, so `rclone move` failed with 403 `insufficientFilePermissions`.) The first run on a full folder fetches every file it has not seen. That is safe, because ingest dedupes by event id. `acta inbox pull --dry-run` lists what it would fetch and changes nothing. `ACTA_INBOX_REMOTE` replaces `ccinbox:`.
+
+A file that fails validation moves to `inbox/rejected/` with a `.err` file and fails that run of the unit. Its ID is already recorded, so later runs do not fetch it again. Read the reason in the `.err` file, with `acta doctor`, or with `journalctl --user -u acta-inbox`. To retry, fix the file and move it back to `inbox/`.
+
+One-time setup: share the Drive folder with the service account, then `rclone config create ccinbox drive scope=drive root_folder_id=<folder id> service_account_file=<key.json>` (key file mode 600). The remote stays in `~/.config/rclone/rclone.conf`.
 
 ## Mastery (day one: performance skills)
 

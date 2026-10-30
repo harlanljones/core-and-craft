@@ -40,6 +40,7 @@ Create the ApeKey in Monkeytype's account settings and enable it. The key is rea
 | `acta log <kind> --subject S --agent A [--data JSON] [--at T]` | append one event |
 | `acta retract <id> --agent A [--reason R]` | append `event.retracted` |
 | `acta ingest [file...]` | append inbox files from remote agents |
+| `acta inbox pull [--dry-run]` | copy new `*.jsonl` files from the Drive inbox (rclone remote `ccinbox:`, or `ACTA_INBOX_REMOTE`) into `inbox/`, then ingest them; reads Drive only (files stay there; delete old ones by hand), fetches each Drive file ID once (`inbox-seen.json` in the state dir); rejected files go to `inbox/rejected/` with a `.err`; exit 1 on a failed listing, copy or rejected file; `--dry-run` lists what it would fetch |
 | `acta snapshot` | rebuild `snapshot.json` |
 | `acta status [--json]` | one line for a bar widget |
 | `acta notify [--all]` | desktop notice for each new open check-in, new proposals (one notice) and, after 20:00, an unkept streak; once each, tracked in `notified.json`; first run records a baseline unless `--all`; `ACTA_NOTIFY_CMD` replaces `omarchy-notification-send` |
