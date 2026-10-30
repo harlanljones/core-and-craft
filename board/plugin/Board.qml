@@ -48,7 +48,13 @@ Item {
   // than the board), in file-name order: 10-, 20-, ... as on the phone.
   // Anything the search cannot place goes on the next free row, so a tile
   // never falls back onto another tile's origin.
+  // The Repeater's items and each widget's compiled program arrive after the
+  // first pass (itemAt() is not a tracked read, and a null item reads no
+  // property), so a tile would stay at the 3x2 fallback. placesRev bumps on
+  // every item added and every program change to re-run the layout.
+  property int placesRev: 0
   readonly property var places: {
+    void board.placesRev
     var used = [], out = []
     for (var i = 0; i < tiles.count; i++) {
       var t = tiles.itemAt(i)
@@ -128,6 +134,8 @@ Item {
   Repeater {
     id: tiles
     model: files
+    onItemAdded: board.placesRev++
+    onItemRemoved: board.placesRev++
     delegate: Rectangle {
       id: tile
       required property string filePath
@@ -148,6 +156,7 @@ Item {
 
       Connections {
         target: widget
+        function onProgramChanged() { board.placesRev++ }
         function onScreenRequested() { board.screenPath = widget.path }
         function onScreenClosed() { if (board.screenPath === widget.path) board.screenPath = "" }
       }
