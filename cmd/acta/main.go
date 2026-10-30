@@ -349,8 +349,11 @@ func appendOne(e env, ev event.Event) error {
 
 // readInbox parses one inbox file. Lines may omit id (acta computes it) and
 // must omit or ignore seq (acta assigns it). Any bad line rejects the file;
-// cmdIngest then moves it to inbox/rejected/ (see quarantine).
-func readInbox(path string) ([]event.Event, error) {
+// cmdIngest then moves it to inbox/rejected/ (see quarantine). remote is true
+// for files found in inbox/: those come from remote agents, so a line that
+// claims a local writer (manual, acta, acta-mt) is rejected. A file named on
+// the command line is Harlan's own and may hold any writer.
+func readInbox(path string, remote bool) ([]event.Event, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -373,6 +376,10 @@ func readInbox(path string) ([]event.Event, error) {
 			continue
 		}
 		ev.Seq = 0
+		if remote && event.LocalAgent(ev.Source.Agent) {
+			errs = append(errs, fmt.Errorf("line %d: source.agent %q writes only on this machine, never through the inbox", n, ev.Source.Agent))
+			continue
+		}
 		if ev.ID == "" {
 			id, err := event.NativeID(ev)
 			if err != nil {
@@ -416,7 +423,7 @@ func cmdIngest(e env, args []string) error {
 	var failed, moved []string
 	total, dups := 0, 0
 	for _, p := range files {
-		evs, err := readInbox(p)
+		evs, err := readInbox(p, fromInbox)
 		if err != nil {
 			msg := fmt.Sprintf("%s rejected:\n%v\n", filepath.Base(p), err)
 			fmt.Fprintf(e.stderr, "acta: %s", msg)

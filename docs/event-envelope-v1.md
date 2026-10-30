@@ -16,7 +16,7 @@
 | `kind` | string | See below |
 | `subject` | string | `skill:<slug>`, `note:<slug>`, `card:<slug>`, `quest:<slug>` (every `quest.*` kind), `checkin:<slug>` (every `checkin.*` kind) or `ask:<slug>` (every `pillar.*` kind). For `event.retracted`, the target event's id. For `day.rested`, `day:YYYY-MM-DD`. |
 | `source.via` | string | `chat`, `manual`, `monkeytype-api`, `keybr`, ... |
-| `source.agent` | string | Fixed list: `acta`, `acta-mt`, `claude-code`, `hermes`, `manual`, `duet:<channel>` |
+| `source.agent` | string | Fixed list: `acta`, `acta-mt`, `claude-code`, `hermes`, `manual`, `duet:<channel>`. `acta`, `acta-mt` and `manual` write only on this machine; an inbox file may not claim them (see below). |
 | `source.ref`, `source.note` | string | Optional |
 | `data` | object | Kind-specific |
 | `supersedes` | string | Optional: id of the event this one corrects |
@@ -62,7 +62,7 @@ Append `event.retracted` (`acta retract <id>`) or a new event with `supersedes`.
 
 ## Remote writers: the inbox
 
-Cloud agents (Claude Duet channels) can't take the lock. They write whole files to `$ACTA_DATA/inbox/<recorded_at>-<agent>.jsonl`: one event per line, `seq` omitted, `id` optional (computed if missing). `acta ingest` validates each file; any bad line rejects the whole file. A rejected file moves to `$ACTA_DATA/inbox/rejected/<name>`, with `<name>.err` next to it holding the file name and each `line N: ...` error; if that name is taken, acta adds a suffix (`<base>-1.jsonl`, `<base>-2.jsonl`, ...) and never overwrites or deletes. The `*.jsonl` glob does not enter `rejected/`, so a rejected file is not retried. To retry, fix the file and move it back to `inbox/`. With `--keep`, acta moves nothing. Good files are appended (dedupe by id) and removed.
+Cloud agents (Claude Duet channels) can't take the lock. They write whole files to `$ACTA_DATA/inbox/<recorded_at>-<agent>.jsonl`: one event per line, `seq` omitted, `id` optional (computed if missing). `acta ingest` validates each file; any bad line rejects the whole file. A line in `inbox/` whose `source.agent` is `manual`, `acta` or `acta-mt` is bad (`line N: source.agent "manual" writes only on this machine, never through the inbox`): those writers are Harlan and acta on diocletian, and `acta relay` forwards `manual` events to the pillar agents as Harlan's own words, so a remote file must not claim them. A file named on the command line (`acta ingest <file>`) is Harlan's own and may hold any writer. A rejected file moves to `$ACTA_DATA/inbox/rejected/<name>`, with `<name>.err` next to it holding the file name and each `line N: ...` error; if that name is taken, acta adds a suffix (`<base>-1.jsonl`, `<base>-2.jsonl`, ...) and never overwrites or deletes. The `*.jsonl` glob does not enter `rejected/`, so a rejected file is not retried. To retry, fix the file and move it back to `inbox/`. With `--keep`, acta moves nothing. Good files are appended (dedupe by id) and removed.
 
 ### Duet route: Drive to inbox
 

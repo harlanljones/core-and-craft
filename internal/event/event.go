@@ -58,6 +58,15 @@ var agentExact = []string{"acta", "acta-mt", "claude-code", "hermes", "manual"}
 
 const agentDuetPrefix = "duet:"
 
+// localAgents write only on this machine, through acta itself: Harlan's own
+// commands and taps (manual), acta's bookkeeping (acta) and the Monkeytype
+// pull (acta-mt). An inbox file comes from a remote agent, so it may not
+// claim one of these.
+var localAgents = []string{"acta", "acta-mt", "manual"}
+
+// LocalAgent reports whether a is a writer that never arrives by the inbox.
+func LocalAgent(a string) bool { return contains(localAgents, a) }
+
 type Source struct {
 	Via   string `json:"via"`
 	Agent string `json:"agent"`
