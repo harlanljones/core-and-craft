@@ -188,5 +188,20 @@ const open2 = open(Object.assign({}, snap, { streak: { days: 3, today: false } }
   ok(JSON.stringify(open2.take()) === JSON.stringify([['run', 'acta rest --via board']]), 'rest day command (map)')
 }
 
+// ------------------------------------------------------------------ many proposals: every boat stays on the canvas, by its own lot
+{
+  const pillars = Object.keys(spot)
+  const many = Object.assign({}, snap, { proposed: pillars.map((pillar, n) => Object.assign({}, snap.proposed[0], { id: 'q_boat' + n, pillar })) })
+  const wm = open(many)
+  const cv = find(wm.screen().children, n => n.kind === 'Canvas')[0]
+  pillars.forEach((pillar, n) => {
+    const [bx, by] = at(spot[pillar][0] * G + 1.25, spot[pillar][1] * G + 1.0)
+    ok(bx + 29 <= 582 && by + 32 <= 470, 'boat for ' + pillar + ' is on the canvas', bx + ',' + by)
+    wm.setPop('')
+    cv.h.onTap((bx + 18) * scale, (by + 26) * scale)
+    ok(wm.pop() === 'prop:q_boat' + n, 'boat tap for ' + pillar, wm.pop())
+  })
+}
+
 console.log(`${failed ? 'FAIL' : 'ok  '} town taps: ${passed} passed, ${failed} failed`)
 process.exit(failed ? 1 : 0)

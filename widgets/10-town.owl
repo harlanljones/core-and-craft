@@ -153,10 +153,12 @@ widget "town" {
     [oj + 0.38, oj + 0.62].map(y => {"g": 0, "k": "line", "stroke": alpha(foreground, 0.4), "w": 1.2, "pts": [[b0, y, 3], [b1, y, 3]]}),
     range(1, 6).map(k => {"g": 0, "k": "line", "stroke": alpha(background, 0.6), "w": 1.2, "pts": [[b0 + (b1 - b0) * k / 6, oj + 0.38, 0], [b0 + (b1 - b0) * k / 6, oj + 0.62, 0]]})
   ])
+  // a proposal's slot beside its pillar's lot: 0 for the first of that pillar, 1 for the next, so boats stay by their lots
+  let slot = range(len(props)).map(k => len(range(k).filter(j => get(props, j).pillar == get(props, k).pillar)))
   // a sailboat per proposal, moored off the front of its pillar's lot
   let boatOps = flatten(range(len(props)).map(k => [
-    {"g": 1, "k": "poly", "fill": cyan, "pts": [[get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 7 + k * 30, 26], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 29 + k * 30, 26], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 25 + k * 30, 32], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 11 + k * 30, 32]]},
-    {"g": 1, "k": "poly", "fill": alpha(cyan, 0.8), "pts": [[get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 18 + k * 30, 11], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 27 + k * 30, 24], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 18 + k * 30, 24]]}]))
+    {"g": 1, "k": "poly", "fill": cyan, "pts": [[get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 7 + get(slot, k) * 30, 26], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 29 + get(slot, k) * 30, 26], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 25 + get(slot, k) * 30, 32], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 11 + get(slot, k) * 30, 32]]},
+    {"g": 1, "k": "poly", "fill": alpha(cyan, 0.8), "pts": [[get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 18 + get(slot, k) * 30, 11], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 27 + get(slot, k) * 30, 24], [get(spot, get(props, k).pillar)[0] * G + 1.25, get(spot, get(props, k).pillar)[1] * G + 1, 0, 18 + get(slot, k) * 30, 24]]}]))
   let world = flatten([shallowOps, foamOps, isleOps, bridgeOps, boatOps, towerOps.map(d => merge(d, {"g": 2})), dots.map(d => merge(d, {"g": 3}))])
   // the one place the isometric projection happens
   let proj = world.map(d => merge(d, {"pts": d.pts.map(p => [166 + (p[0] - p[1]) * 58 + (p[3] ?? 0), 214 + (p[0] + p[1]) * 29 - p[2] + (p[4] ?? 0)])}))
@@ -199,7 +201,7 @@ widget "town" {
   ])
   // taps, in the same px: boats, rest day, ? bubbles, then lots
   let boatBox = range(len(props)).map(k => {"n": k,
-    "x0": 166 + (get(spot, get(props, k).pillar)[0] * G + 1.25 - get(spot, get(props, k).pillar)[1] * G - 1) * 58 + 18 + k * 30 - 12,
+    "x0": 166 + (get(spot, get(props, k).pillar)[0] * G + 1.25 - get(spot, get(props, k).pillar)[1] * G - 1) * 58 + 18 + get(slot, k) * 30 - 12,
     "y0": 214 + (get(spot, get(props, k).pillar)[0] * G + 1.25 + get(spot, get(props, k).pillar)[1] * G + 1) * 29 + 26 - 16})
   let boatBoxes = boatBox.map(b => merge(b, {"x1": b.x0 + 24, "y1": b.y0 + 24}))
   let askBoxes = lots5.filter(l => l.askid != "").map(l => {"id": l.askid, "x0": l.x0 + l.pw + 1, "y0": l.ty - 9, "x1": l.x0 + l.pw + 19, "y1": l.ty + 9})
