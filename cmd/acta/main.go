@@ -91,7 +91,7 @@ func main() {
 }
 
 const usage = `usage: acta <command>
-  init | mt pull [--all] | log <kind> | retract <id> | ingest [file...] | snapshot | status [--json] | notify [--all] | doctor | version
+  init | mt pull [--all] | log <kind> | retract <id> | ingest [file...] | inbox pull [--dry-run] | snapshot | status [--json] | notify [--all] | doctor | version
   quest add|done|undo|accept|decline|drop|snooze|edit|list | checkin ask|answer | rest`
 
 func run(e env, args []string) int {
@@ -121,6 +121,12 @@ func run(e env, args []string) int {
 		err = cmdRest(e, args[1:])
 	case "ingest":
 		err = cmdIngest(e, args[1:])
+	case "inbox":
+		if len(args) < 2 || args[1] != "pull" {
+			fmt.Fprintln(e.stderr, "usage: acta inbox pull [--dry-run]")
+			return 2
+		}
+		err = cmdInboxPull(e, args[2:])
 	case "snapshot":
 		err = cmdSnapshot(e)
 	case "status":
