@@ -62,7 +62,26 @@ Item {
     stateDir: root.stateHome + "/core-and-craft/owl"
   }
 
+  // `omarchy-shell core-and-craft openMap [screen]` (the bar pill passes its own
+  // screen) opens the town map on that screen's board, else on the first one.
+  IpcHandler {
+    target: "core-and-craft"
+    function openMap(screen: string): void {
+      var all = surfaces.instances
+      for (var i = 0; i < all.length; i++) {
+        if (all[i].modelData.name === screen && all[i].boardItem.openMap("town")) return
+      }
+      for (var j = 0; j < all.length; j++) {
+        if (all[j].boardItem.openMap("town")) return
+      }
+    }
+    function closeMap(): void {
+      for (var i = 0; i < surfaces.instances.length; i++) surfaces.instances[i].boardItem.closeMap()
+    }
+  }
+
   Variants {
+    id: surfaces
     model: {
       var want = root.opt("screens", null)
       if (!want || !want.length) return Quickshell.screens
@@ -86,6 +105,7 @@ Item {
         mask: Region { item: board }
 
         readonly property real margin: root.opt("margin", 24)
+        readonly property var boardItem: board
 
         Board {
           id: board

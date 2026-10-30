@@ -83,6 +83,16 @@ Item {
   }
   // A widget's screen { } covers the board until it closes. The town uses this.
   property string screenPath: ""
+  // Opens the full map of the widget whose file name contains `name` (the bar pill and IPC use this).
+  // Closes any open map (the IPC close, and what Esc and the X do).
+  function closeMap() { var w = board.screenOwner(); if (w) w.closeScreen() }
+  function openMap(name) {
+    for (var i = 0; i < tiles.count; i++) {
+      var t = tiles.itemAt(i)
+      if (t && t.owl && t.owl.path.indexOf(name) >= 0) { t.owl.openScreen(); return true }
+    }
+    return false
+  }
   function screenOwner() {
     if (!screenPath) return null
     for (var i = 0; i < tiles.count; i++) {
