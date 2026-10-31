@@ -60,7 +60,7 @@ func (d *fakeDrive) command(name string, args ...string) (string, error) {
 	d.calls = append(d.calls, args)
 	switch args[0] {
 	case "lsjson":
-		want := []string{"lsjson", d.remote, "--files-only", "--include", "*.jsonl", "--drive-skip-gdocs"}
+		want := []string{"lsjson", d.remote, "--files-only", "--include", "*.jsonl", "--include", "*.md", "--drive-skip-gdocs"}
 		if strings.Join(args, " ") != strings.Join(want, " ") {
 			d.t.Errorf("lsjson args %q, want %q", args, want)
 		}

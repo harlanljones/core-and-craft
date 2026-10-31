@@ -21,8 +21,7 @@ snap() {
   local name=$1; shift
   export ACTA_DATA="$tmp/$name/data" ACTA_STATE="$tmp/$name/state" ACTA_TZ=UTC
   "$acta" init >/dev/null
-  cp "$root"/seed/*.jsonl "$ACTA_DATA/inbox/"
-  "$acta" ingest >/dev/null
+  "$acta" ingest "$root"/seed/*.jsonl >/dev/null
   [ $# -gt 0 ] && "$acta" log "$@" >/dev/null
   "$acta" snapshot >/dev/null
   cat "$ACTA_STATE/snapshot.json"
@@ -35,8 +34,7 @@ target=$(snap target skill.target_set --subject skill:typing --agent manual --da
 busy() {
   export ACTA_DATA="$tmp/busy/data" ACTA_STATE="$tmp/busy/state" ACTA_TZ=UTC
   "$acta" init >/dev/null
-  cp "$root"/seed/*.jsonl "$ACTA_DATA/inbox/"
-  "$acta" ingest >/dev/null
+  "$acta" ingest "$root"/seed/*.jsonl >/dev/null
   "$acta" quest add --pillar competence --title "15 min typing drill" --priority 1 --every daily --skill skill:typing --rule runs:9 >/dev/null
   "$acta" quest add --pillar recovery --title "Lights out by 22:30" --every daily >/dev/null
   "$acta" quest add --pillar career --title "Ship the board PR" --priority 2 >/dev/null

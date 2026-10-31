@@ -77,6 +77,7 @@ func gains(live []event.Event, in xpInputs, loc *time.Location) []xpGain {
 	var out []xpGain
 	study := map[[2]string]float64{} // date, pillar -> minutes
 	answered := map[string]bool{}
+	noted := map[string]bool{}
 	for _, e := range live {
 		date := e.LocalDate(loc)
 		switch e.Kind {
@@ -87,7 +88,14 @@ func gains(live []event.Event, in xpInputs, loc *time.Location) []xpGain {
 			}
 			out = append(out, xpGain{date, e.Pillar, xp})
 		case noteAddedKind:
-			out = append(out, xpGain{date, e.Pillar, xpNoteAdded})
+			// Once per note: a new version (supersedes) earns nothing more,
+			// and a shared node (notes/nodes/) is filed from a note that
+			// already earned it.
+			p, _ := decode(e.Data)["path"].(string)
+			if folder, _, _ := event.NotePath(p); !noted[e.Subject] && folder != event.NodesDir {
+				out = append(out, xpGain{date, e.Pillar, xpNoteAdded})
+			}
+			noted[e.Subject] = true
 		case checkinAnswered:
 			if !answered[e.Subject] {
 				answered[e.Subject] = true

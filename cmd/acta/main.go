@@ -6,7 +6,8 @@
 //	acta log <kind> [flags]     append one event
 //	acta retract <id> [flags]   append event.retracted for an event
 //	acta ingest [file...]       append inbox files written by remote agents
-//	acta snapshot               rebuild snapshot.json from the log
+//	acta note add <file>...     log notes written or edited on this machine
+//	acta snapshot               rebuild snapshot.json and graph.json from the log
 //	acta status [--json]        one line for a bar widget
 //	acta doctor                 check the log's invariants and the inbox route
 //	acta quest <command>        add, finish, undo, accept, decline, drop, snooze, edit, list
@@ -97,7 +98,7 @@ func main() {
 }
 
 const usage = `usage: acta <command>
-  init | mt pull [--all] | log <kind> | retract <id> | ingest [file...] | inbox pull [--dry-run] | snapshot | status [--json] | notify [--all] | doctor | version
+  init | mt pull [--all] | log <kind> | retract <id> | ingest [file...] | inbox pull [--dry-run] | note add <file>... | snapshot | status [--json] | notify [--all] | doctor | version
   quest add|done|undo|accept|decline|drop|snooze|edit|list | checkin ask|answer | rest
   ask --pillar P --text T | relay [--dry-run]`
 
@@ -138,6 +139,8 @@ func run(e env, args []string) int {
 			return 2
 		}
 		err = cmdInboxPull(e, args[2:])
+	case "note":
+		err = cmdNote(e, args[1:])
 	case "snapshot":
 		err = cmdSnapshot(e)
 	case "status":
@@ -420,10 +423,29 @@ func cmdIngest(e env, args []string) error {
 		sort.Strings(matches)
 		files = matches
 	}
+	logged, _, err := store.ReadFile(e.logPath())
+	if err != nil {
+		return err
+	}
 	var failed, moved []string
-	total, dups := 0, 0
+	total, dups, waits := 0, 0, 0
 	for _, p := range files {
 		evs, err := readInbox(p, fromInbox)
+		var plans []placement
+		if err == nil {
+			var waiting int
+			var errs []error
+			plans, waiting, errs = planNotes(e, filepath.Dir(p), evs, logged, fromInbox)
+			if len(errs) > 0 {
+				err = errors.Join(errs...)
+			} else if fromInbox && waiting > 0 {
+				// Drive may hand over the event file before its bodies; the
+				// next run tries again (doctor warns after an hour).
+				fmt.Fprintf(e.stderr, "acta: %s waits for %d note bod(ies)\n", filepath.Base(p), waiting)
+				waits++
+				continue
+			}
+		}
 		if err != nil {
 			msg := fmt.Sprintf("%s rejected:\n%v\n", filepath.Base(p), err)
 			fmt.Fprintf(e.stderr, "acta: %s", msg)
@@ -438,19 +460,32 @@ func cmdIngest(e env, args []string) error {
 			}
 			continue
 		}
+		if err := placeNotes(plans); err != nil {
+			return err
+		}
 		res, err := store.Append(e.logPath(), evs)
 		if err != nil {
 			return err
 		}
+		logged = append(logged, res.Appended...)
 		total += len(res.Appended)
 		dups += res.Duplicates
 		if fromInbox && !*keep {
 			if err := os.Remove(p); err != nil {
 				return err
 			}
+			for _, pl := range plans {
+				if pl.from != "" {
+					os.Remove(pl.from)
+				}
+			}
 		}
 	}
-	fmt.Fprintf(e.stdout, "ingest: %d file(s), %d new, %d already logged\n", len(files)-len(failed), total, dups)
+	notes := ""
+	if waits > 0 {
+		notes = fmt.Sprintf(", %d waiting for note bodies", waits)
+	}
+	fmt.Fprintf(e.stdout, "ingest: %d file(s), %d new, %d already logged%s\n", len(files)-len(failed)-waits, total, dups, notes)
 	if len(failed) > 0 {
 		where := "left in place"
 		if len(moved) > 0 {
@@ -516,10 +551,14 @@ func cmdSnapshot(e env) error {
 		return err
 	}
 	s := snapshot.Build(evs, bad, src, e.now(), e.loc)
+	if s.Graph, err = buildGraph(e, evs, s); err != nil {
+		return err
+	}
 	if err := snapshot.Write(e.snapshotPath(), s); err != nil {
 		return err
 	}
 	fmt.Fprintf(e.stdout, "snapshot: %d events, %d skill(s), %d error(s) -> %s\n", len(evs), len(s.Skills), len(bad), e.snapshotPath())
+	fmt.Fprintf(e.stdout, "graph: %d nodes, %d edges, %d note(s), %d stub(s), %d problem(s) -> %s\n", s.Graph.Nodes, s.Graph.Edges, s.Graph.Notes, s.Graph.Stubs, s.Graph.Errors, e.graphPath())
 	return nil
 }
 

@@ -75,6 +75,7 @@ func checkRoute(e env) *routeReport {
 	checkRejected(e, r)
 	checkClientID(e, r)
 	checkInboxPull(e, r)
+	checkNotes(e, r)
 	return r
 }
 

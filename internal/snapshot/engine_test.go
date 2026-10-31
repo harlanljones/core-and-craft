@@ -253,3 +253,15 @@ func TestAskIgnoresAnotherPillarsAnswer(t *testing.T) {
 		t.Fatalf("another pillar's answer closed the ask: %+v", as)
 	}
 }
+
+// A note earns xp once; a new version or a shared node earns nothing.
+func TestNoteXPOncePerNote(t *testing.T) {
+	sum := strings.Repeat("0", 64)
+	l := &qlog{}
+	l.add("note.added", "note:study", "duet:competence", "2026-10-29", `{"path":"notes/competence/study.md","sha256":"`+sum+`"}`)            // 15
+	l.add("note.added", "note:study", "manual", "2026-10-29", `{"path":"notes/competence/study.md","sha256":"`+sum+`"}`)                     // a new version: 0
+	l.add("note.added", "note:martin-luther", "duet:competence", "2026-10-29", `{"path":"notes/nodes/martin-luther.md","sha256":"`+sum+`"}`) // 0
+	if s := Build(l.evs, nil, Source{}, now, la); s.XP.Total != 15 {
+		t.Fatalf("total %d", s.XP.Total)
+	}
+}
