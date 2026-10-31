@@ -133,6 +133,8 @@ acta note add ~/core-and-craft/notes/nodes/martin-luther.md
 
 logs the file as it is now, superseding the version the log had (`--pillar`, `--agent`, `--via` as for `acta log`). A file edited but not re-added shows in `acta doctor` and in `graph.json`'s problems, with the command to run.
 
+One slug names one node, so `acta note add` refuses a file whose slug is already a file in another folder under `notes/`. To move a note to another folder when the old file is still there, run `acta note add --move <new path>`: it logs the new path, keeps the old body in `note-versions/` and removes the old file. (If you moved the file, plain `acta note add <new path>` is enough.) `acta doctor` warns about a slug that is in two folders.
+
 ### From the command line
 
 `acta ingest <file>...` (Harlan's own files, such as `seed/`) also looks for a body at `<the file's folder>/<path>`, so `seed/notes/nodes/x.md` sits beside `seed/*.jsonl`. A body it can't find is logged anyway, with a warning.

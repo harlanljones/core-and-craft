@@ -175,6 +175,22 @@ func Target(v string) (string, bool) {
 
 func isLink(v string) bool { return strings.Contains(v, "[[") }
 
+// Pillars reads a note's pillars: line the way the graph does: trimmed,
+// lowercased, a "pillar:" prefix dropped, repeats dropped. bad are the
+// values that aren't a pillar.
+func Pillars(f Front) (pillars, bad []string) {
+	for _, p := range f.Vals["pillars"] {
+		p = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(p, "pillar:")))
+		switch {
+		case !contains(event.Pillars, p):
+			bad = append(bad, p)
+		case !contains(pillars, p):
+			pillars = append(pillars, p)
+		}
+	}
+	return pillars, bad
+}
+
 func contains(list []string, s string) bool {
 	for _, v := range list {
 		if v == s {
@@ -275,15 +291,10 @@ func Build(in Input, builtAt string) Graph {
 		case !contains(NodeTypes, n.Type):
 			problem(nt.ID, "type %q is not in the vocabulary", n.Type)
 		}
-		for _, p := range front.Vals["pillars"] {
-			p = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(p, "pillar:")))
-			if !contains(event.Pillars, p) {
-				problem(nt.ID, "pillars: %q is not a pillar", p)
-				continue
-			}
-			if !contains(n.Pillars, p) {
-				n.Pillars = append(n.Pillars, p)
-			}
+		var bad []string
+		n.Pillars, bad = Pillars(front)
+		for _, p := range bad {
+			problem(nt.ID, "pillars: %q is not a pillar", p)
 		}
 		switch {
 		case len(n.Pillars) == 0 && folder != "" && folder != event.NodesDir:

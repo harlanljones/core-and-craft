@@ -314,10 +314,32 @@ func buildGraph(e env, evs []event.Event, s snapshot.Snapshot) (*graph.Summary, 
 	return &sum, nil
 }
 
+// slugFiles maps each slug to the note files under notes/ that carry it, as
+// paths relative to root, sorted. A slug is one node, so more than one file
+// is a clash.
+func slugFiles(root string) map[string][]string {
+	m := map[string][]string{}
+	filepath.WalkDir(filepath.Join(root, "notes"), func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		rel, rerr := filepath.Rel(root, p)
+		if rerr != nil {
+			return nil
+		}
+		rel = filepath.ToSlash(rel)
+		if _, slug, ok := event.NotePath(rel); ok {
+			m[slug] = append(m[slug], rel)
+		}
+		return nil
+	})
+	return m
+}
+
 // cmdNote: acta note add <file>... logs notes written on this machine (in
 // Obsidian, say) as note.added, superseding the version the log had.
 func cmdNote(e env, args []string) error {
-	const use = "usage: acta note add <file>... [--pillar P] [--agent A] [--via V]"
+	const use = "usage: acta note add <file>... [--pillar P] [--agent A] [--via V] [--move]"
 	if len(args) == 0 || args[0] != "add" {
 		return errors.New(use)
 	}
@@ -326,6 +348,7 @@ func cmdNote(e env, args []string) error {
 	pillar := fs.String("pillar", "", "pillar (default: the note's pillars, its folder, or the version before)")
 	agent := fs.String("agent", "manual", "writer")
 	via := fs.String("via", "manual", "chat, manual, ...")
+	move := fs.Bool("move", false, "the note moved folders: log its new path, then remove the old file")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -346,6 +369,7 @@ func cmdNote(e env, args []string) error {
 		return err
 	}
 	var out []event.Event
+	var moved []string // old files to remove once the log has the new paths
 	for _, f := range fs.Args() {
 		abs, err := filepath.Abs(f)
 		if err != nil {
@@ -364,6 +388,22 @@ func cmdNote(e env, args []string) error {
 		if !ok {
 			return fmt.Errorf("%s: want notes/<pillar>/<slug>.md or notes/nodes/<slug>.md (lowercase slug)", rel)
 		}
+		// One slug names one node: the same slug in another folder is a
+		// clash, unless that is the file the log names and it is moving.
+		for _, o := range slugFiles(root)[slug] {
+			if o == rel {
+				continue
+			}
+			live, _ := noteRef(prev["note:"+slug])
+			switch {
+			case live == o && *move:
+				moved = append(moved, o)
+			case live == o:
+				return fmt.Errorf("%s: %s has the same slug; one slug names one node (to move the note, run acta note add --move %s)", rel, o, rel)
+			default:
+				return fmt.Errorf("%s: %s has the same slug; one slug names one node (move or delete one first)", rel, o)
+			}
+		}
 		b, err := os.ReadFile(abs)
 		if err != nil {
 			return err
@@ -380,10 +420,8 @@ func cmdNote(e env, args []string) error {
 			continue
 		}
 		p := *pillar
-		for _, fp := range front.Vals["pillars"] {
-			if p == "" && contains(event.Pillars, strings.TrimPrefix(fp, "pillar:")) {
-				p = strings.TrimPrefix(fp, "pillar:")
-			}
+		if ps, _ := graph.Pillars(front); p == "" && len(ps) > 0 {
+			p = ps[0]
 		}
 		if p == "" && folder != event.NodesDir {
 			p = folder
@@ -425,6 +463,19 @@ func cmdNote(e env, args []string) error {
 	}
 	for _, ev := range res.Appended {
 		fmt.Fprintf(e.stdout, "%s %s seq %d\n", ev.ID, ev.Subject, ev.Seq)
+	}
+	// The old file's body stays readable in note-versions/, edits and all.
+	for _, o := range moved {
+		old := filepath.Join(root, filepath.FromSlash(o))
+		if b, err := os.ReadFile(old); err == nil {
+			if err := writeBody(e.versionPath(sumHex(b)), sumHex(b), b); err != nil {
+				return err
+			}
+		}
+		if err := os.Remove(old); err != nil {
+			return err
+		}
+		fmt.Fprintf(e.stdout, "removed %s\n", o)
 	}
 	return nil
 }
@@ -505,17 +556,37 @@ func checkNotes(e env, r *routeReport) {
 			changed = append(changed, path)
 		}
 	}
+	// A slug in two folders is its own warning, not two unlogged files.
+	var clashes []string
+	clash := map[string]bool{}
+	slugs := slugFiles(e.data)
+	names := make([]string, 0, len(slugs))
+	for slug := range slugs {
+		names = append(names, slug)
+	}
+	sort.Strings(names)
+	for _, slug := range names {
+		if fs := slugs[slug]; len(fs) > 1 {
+			clashes = append(clashes, fmt.Sprintf("notes: slug %s is in %d folders: %s; one slug names one node", slug, len(fs), strings.Join(fs, ", ")))
+			for _, f := range fs {
+				clash[f] = true
+			}
+		}
+	}
 	var unlogged []string
 	filepath.WalkDir(filepath.Join(e.data, "notes"), func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") {
 			return nil
 		}
 		rel, rerr := filepath.Rel(e.data, p)
-		if rerr == nil && !named[filepath.ToSlash(rel)] {
+		if rerr == nil && !named[filepath.ToSlash(rel)] && !clash[filepath.ToSlash(rel)] {
 			unlogged = append(unlogged, filepath.ToSlash(rel))
 		}
 		return nil
 	})
+	for _, c := range clashes {
+		r.warn("%s", c)
+	}
 	if len(missing) > 0 {
 		r.warn("notes: %d note(s) the log names are missing: %s", len(missing), strings.Join(missing, ", "))
 	}
@@ -528,7 +599,7 @@ func checkNotes(e env, r *routeReport) {
 	if len(unlogged) > 0 {
 		r.warn("notes: %d note(s) the log doesn't name; run acta note add %s", len(unlogged), strings.Join(unlogged, " "))
 	}
-	if len(waitingFiles)+len(orphans)+len(missing)+len(changed)+len(unmerged)+len(unlogged) == 0 {
+	if len(waitingFiles)+len(orphans)+len(missing)+len(changed)+len(unmerged)+len(unlogged)+len(clashes) == 0 {
 		r.ok("notes: ok, %d logged", len(named))
 	}
 }
