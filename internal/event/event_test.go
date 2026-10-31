@@ -263,3 +263,34 @@ func TestNoteAddedPath(t *testing.T) {
 		t.Errorf("NotePath %q %q %v", f, s, ok)
 	}
 }
+
+func TestReviewLogged(t *testing.T) {
+	review := func(subject, data string) Event {
+		e := valid()
+		e.Kind, e.Subject, e.Data = "review.logged", subject, json.RawMessage(data)
+		return e
+	}
+	for _, e := range []Event{
+		review("card:great-schism", `{"rating":3}`),
+		review("card:great-schism", `{"rating":1,"duration_ms":4200,"card":"card:great-schism"}`),
+		review("card:great-schism", `{"rating":4.0,"card":"great-schism"}`),
+	} {
+		if err := Validate(e, true); err != nil {
+			t.Errorf("%s: %v", e.Data, err)
+		}
+	}
+	for name, e := range map[string]Event{
+		"no rating":         review("card:x", `{}`),
+		"rating 0":          review("card:x", `{"rating":0}`),
+		"rating 5":          review("card:x", `{"rating":5}`),
+		"half rating":       review("card:x", `{"rating":2.5}`),
+		"rating as text":    review("card:x", `{"rating":"good"}`),
+		"negative duration": review("card:x", `{"rating":3,"duration_ms":-1}`),
+		"other card":        review("card:x", `{"rating":3,"card":"card:y"}`),
+		"note subject":      review("note:x", `{"rating":3}`),
+	} {
+		if Validate(e, true) == nil {
+			t.Errorf("%s: want error", name)
+		}
+	}
+}

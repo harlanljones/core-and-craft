@@ -7,6 +7,8 @@
 //	acta retract <id> [flags]   append event.retracted for an event
 //	acta ingest [file...]       append inbox files written by remote agents
 //	acta note add <file>...     log notes written or edited on this machine
+//	acta review [--next]        list the due recall cards, or show the next one
+//	acta review <card> --rating R  log one review (again, hard, good, easy)
 //	acta snapshot               rebuild snapshot.json and graph.json from the log
 //	acta status [--json]        one line for a bar widget
 //	acta doctor                 check the log's invariants and the inbox route
@@ -98,7 +100,7 @@ func main() {
 }
 
 const usage = `usage: acta <command>
-  init | mt pull [--all] | log <kind> | retract <id> | ingest [file...] | inbox pull [--dry-run] | note add <file>... | snapshot | status [--json] | notify [--all] | doctor | version
+  init | mt pull [--all] | log <kind> | retract <id> | ingest [file...] | inbox pull [--dry-run] | note add <file>... | review [--next] | review <card> --rating R | snapshot | status [--json] | notify [--all] | doctor | version
   quest add|done|undo|accept|decline|drop|snooze|edit|list | checkin ask|answer | rest
   ask --pillar P --text T | relay [--dry-run]`
 
@@ -141,6 +143,8 @@ func run(e env, args []string) int {
 		err = cmdInboxPull(e, args[2:])
 	case "note":
 		err = cmdNote(e, args[1:])
+	case "review":
+		err = cmdReview(e, args[1:])
 	case "snapshot":
 		err = cmdSnapshot(e)
 	case "status":
@@ -551,7 +555,7 @@ func cmdSnapshot(e env) error {
 		return err
 	}
 	s := snapshot.Build(evs, bad, src, e.now(), e.loc)
-	if s.Graph, err = buildGraph(e, evs, s); err != nil {
+	if s.Graph, s.Cards, err = buildGraph(e, evs, s); err != nil {
 		return err
 	}
 	if err := snapshot.Write(e.snapshotPath(), s); err != nil {
@@ -559,6 +563,7 @@ func cmdSnapshot(e env) error {
 	}
 	fmt.Fprintf(e.stdout, "snapshot: %d events, %d skill(s), %d error(s) -> %s\n", len(evs), len(s.Skills), len(bad), e.snapshotPath())
 	fmt.Fprintf(e.stdout, "graph: %d nodes, %d edges, %d note(s), %d stub(s), %d problem(s) -> %s\n", s.Graph.Nodes, s.Graph.Edges, s.Graph.Notes, s.Graph.Stubs, s.Graph.Errors, e.graphPath())
+	fmt.Fprintf(e.stdout, "cards: %d, %d due, %d new, %d mature\n", s.Cards.Total, s.Cards.Due, s.Cards.New, s.Cards.Mature)
 	return nil
 }
 

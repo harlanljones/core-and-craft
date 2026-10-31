@@ -49,6 +49,8 @@ Create the ApeKey in Monkeytype's account settings and enable it. The key is rea
 | `acta ingest [file...]` | append inbox files from remote agents; a `note.added` places its body (`inbox/<sha256>.md`) under `notes/`, and a file waits until its bodies arrive |
 | `acta inbox pull [--dry-run]` | copy new `*.jsonl` files from the Drive inbox (rclone remote `ccinbox:`, or `ACTA_INBOX_REMOTE`) into `inbox/`, then ingest them; reads Drive only (files stay there; delete old ones by hand), fetches each Drive file ID once (`inbox-seen.json` in the state dir); rejected files go to `inbox/rejected/` with a `.err`; exit 1 on a failed listing, copy or rejected file; `--dry-run` lists what it would fetch |
 | `acta note add <file>... [--pillar P]` | log a note written or edited on this machine as `note.added` (path and sha256), superseding the version the log had |
+| `acta review [--next]` | list the recall cards due today, or show the next one with its question |
+| `acta review <card> --rating R` | log one FSRS review: `again`, `hard`, `good` or `easy` (1 to 4) |
 | `acta snapshot` | rebuild `snapshot.json` and `graph.json` (notes, skills, quests and pillars as one typed graph; `docs/knowledge-graph.md`) |
 | `acta status [--json]` | one line for a bar widget |
 | `acta notify [--all]` | desktop notice for each new open check-in, new proposals (one notice) and, after 20:00, an unkept streak; once each, tracked in `notified.json`; first run records a baseline unless `--all`; `ACTA_NOTIFY_CMD` replaces `omarchy-notification-send` |
@@ -73,6 +75,7 @@ internal/store/       flock append, scanning
 internal/monkeytype/  ApeKey client and result mapping
 internal/snapshot/    fold into snapshot.json (gate, sustain, daily series, pillars)
 internal/graph/       note frontmatter and the fold into graph.json
+internal/review/      FSRS over review.logged (go-fsrs): due cards, stability, review xp
 internal/relay/       what goes to which Duet agent, the routine fire client, relay.json
 systemd/              user units: daily pull, Drive inbox pull, rebuild on change, evening notify, relay to Duet
 board/plugin/         Omarchy 4 shell plugin: the board, vendored OWL runtime (owl/)
@@ -88,4 +91,4 @@ seed/                 Oct 29 events, the first study note and the 63-node knowle
 2. Board plugin (vendored OWL runtime) and the typing tile.
 3. Rename to CORE & CRAFT and acta; quests, check-ins, xp, levels and streak as events (see `docs/decisions/0001-core-and-craft-migration.md`).
 4. `acta build` into SQLite (modernc.org/sqlite), pillar strip widget, bar pill.
-5. The knowledge graph (notes, `graph.json`; this step's first part), then FSRS reviews over notes with `recall:` (go-fsrs), then the board's Library map.
+5. The knowledge graph (notes, `graph.json`), then FSRS reviews over notes with `recall:` (go-fsrs; `acta review`), then the board's Library map.

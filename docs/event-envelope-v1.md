@@ -39,7 +39,7 @@ body = {"agent": a, "at": at, "data": data, "kind": kind, "recorded_at": rec, "s
 - `typing.keystats` `{key, hits, misses, avg_ms}`: reserved; Monkeytype results carry no per-key data
 - `study.session` `{minutes, subject, kind}`
 - `note.added` `{path, sha256, title?, type?, from_pillar?, sessions?}`: one version of a note file. `path` is `notes/<pillar>/<slug>.md` or `notes/nodes/<slug>.md`, and its slug must be the subject's (`note:<slug>`). `path` and `sha256` (64 lowercase hex of the file's exact bytes) come together; older lines may carry neither. A new version supersedes the event for the old one. Through the inbox, the body travels as `<sha256>.md` (below). See `docs/knowledge-graph.md`.
-- `review.logged` `{card, rating 1..4, duration_ms}`: FSRS input, later phase
+- `review.logged` `{rating 1..4, duration_ms?, card?}`, subject `card:<slug>`: one FSRS review of the card a note's `recall:` line makes. `rating` is 1 again, 2 hard, 3 good, 4 easy; `card`, if present, must be the subject. See `docs/knowledge-graph.md`.
 - `event.retracted` `{reason}`
 - `quest.added` `{title, priority? 1..3, every?, skill?, rule?, status?}`: one concrete next action in the event's pillar.
   - `every`: `once` (default), `daily`, `weekdays`, `weekly:mon,thu`, `every:Nd` (1..365, counted from the day it was added) or `monthly:D` (past a short month's end, its last day).
@@ -95,4 +95,4 @@ Only events from `manual` go, and only once: `$ACTA_STATE/relay.json` records ea
 
 A hand-logged `typing.test` (a screenshot read in chat) that an imported Monkeytype run repeats, with the same subject, local date, and wpm and acc rounded to whole numbers, is counted once, as the import. Each import stands in for at most one hand-logged run. Both stay in the log, so nothing needs retracting after the first pull.
 
-A `typing.test` qualifies when it matches the protocol, has `acc >= min_acc` (default 97), and isn't bailed out. `best` is the best qualifying `wpm`. A skill with a target is `passed` once `sustain_runs` qualifying runs at or above target fall within `sustain_days`. Knowledge nodes (FSRS over `review.logged`) come in a later phase.
+A `typing.test` qualifies when it matches the protocol, has `acc >= min_acc` (default 97), and isn't bailed out. `best` is the best qualifying `wpm`. A skill with a target is `passed` once `sustain_runs` qualifying runs at or above target fall within `sustain_days`. Knowledge cards are scheduled by FSRS over `review.logged` (`docs/knowledge-graph.md`).

@@ -18,6 +18,7 @@ import (
 
 	"github.com/harlanljones/core-and-craft/internal/event"
 	"github.com/harlanljones/core-and-craft/internal/graph"
+	"github.com/harlanljones/core-and-craft/internal/review"
 	"github.com/harlanljones/core-and-craft/internal/store"
 )
 
@@ -102,6 +103,9 @@ type Snapshot struct {
 	// Graph counts graph.json, which acta snapshot writes beside this file
 	// (docs/knowledge-graph.md). Build leaves it nil; cmd/acta fills it in.
 	Graph *graph.Summary `json:"graph,omitempty"`
+	// Cards counts the FSRS recall cards, one per note with a recall: line
+	// (docs/knowledge-graph.md). cmd/acta fills it in with Graph.
+	Cards *review.Summary `json:"cards,omitempty"`
 }
 
 // Effective drops retracted events and events superseded by a live one.
