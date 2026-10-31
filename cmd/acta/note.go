@@ -22,6 +22,7 @@ import (
 
 	"github.com/harlanljones/core-and-craft/internal/event"
 	"github.com/harlanljones/core-and-craft/internal/graph"
+	"github.com/harlanljones/core-and-craft/internal/review"
 	"github.com/harlanljones/core-and-craft/internal/snapshot"
 	"github.com/harlanljones/core-and-craft/internal/store"
 )
@@ -237,15 +238,18 @@ func graphInput(e env, evs []event.Event, s snapshot.Snapshot) graph.Input {
 	return in
 }
 
-// buildGraph writes graph.json and returns its summary for the snapshot.
-func buildGraph(e env, evs []event.Event, s snapshot.Snapshot) (*graph.Summary, error) {
+// buildGraph writes graph.json, with each recall card's schedule on its
+// note, and returns the graph and card summaries for the snapshot.
+func buildGraph(e env, evs []event.Event, s snapshot.Snapshot) (*graph.Summary, *review.Summary, error) {
 	now := e.now()
 	g := graph.Build(graphInput(e, evs, s), now.UTC().Format(time.RFC3339))
+	cards, d := deck(&g, evs, now, e.loc)
 	if err := graph.Write(e.graphPath(), g); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	sum := graph.Summarize(g, now.In(e.loc).AddDate(0, 0, -6).Format("2006-01-02"))
-	return &sum, nil
+	cs := review.Summarize(cards, d.Reviews, now.In(e.loc).Format("2006-01-02"))
+	return &sum, &cs, nil
 }
 
 // cmdNote: acta note add <file>... logs notes written on this machine (in
@@ -453,5 +457,18 @@ func checkNotes(e env, r *routeReport) {
 	}
 	if len(waitingFiles)+len(orphans)+len(missing)+len(changed)+len(unlogged) == 0 {
 		r.ok("notes: ok, %d logged", len(named))
+	}
+
+	g, cards, _ := recallNodes(e, evs)
+	var stray []string
+	for _, p := range g.Errors {
+		if strings.HasPrefix(p.ID, review.Prefix) {
+			stray = append(stray, p.ID)
+		}
+	}
+	if len(stray) > 0 {
+		r.warn("cards: %d card(s) have reviews but no note with a recall: line: %s", len(stray), strings.Join(stray, ", "))
+	} else {
+		r.ok("cards: ok, %d card(s)", len(cards))
 	}
 }

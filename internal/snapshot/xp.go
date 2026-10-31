@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/harlanljones/core-and-craft/internal/event"
+	"github.com/harlanljones/core-and-craft/internal/review"
 )
 
 // The xp table. Nobody writes xp; these rules turn recorded events into it.
@@ -18,6 +19,9 @@ const (
 	xpNoteAdded      = 15
 	xpCheckinAnswer  = 5 // the first answer to each check-in
 	xpSkillPassed    = 50
+	xpReview         = 2  // the first review of a card each day
+	xpReviewDayCap   = 20 // per pillar per day
+	xpCardMature     = 10 // once, when a card's stability first reaches 21 days
 	levelBase        = 100.0
 	levelGrowth      = 1.5
 	historyDays      = 30
@@ -106,6 +110,25 @@ func gains(live []event.Event, in xpInputs, loc *time.Location) []xpGain {
 				study[[2]string{date, e.Pillar}] += f
 			}
 		}
+	}
+	// Reviews: a card counts once a day, and only while its note is in the
+	// log, so a review of a card nobody wrote earns nothing.
+	reviewed := map[[2]string]int{} // date, pillar -> cards reviewed
+	seen := map[[2]string]bool{}    // card, date
+	for _, r := range review.Fold(live, loc).Reviews {
+		if !noted["note:"+review.Slug(r.Card)] {
+			continue
+		}
+		if k := [2]string{r.Card, r.Date}; !seen[k] {
+			seen[k] = true
+			reviewed[[2]string{r.Date, r.Pillar}]++
+		}
+		if r.FirstMature {
+			out = append(out, xpGain{r.Date, r.Pillar, xpCardMature})
+		}
+	}
+	for k, n := range reviewed {
+		out = append(out, xpGain{k[0], k[1], min(n*xpReview, xpReviewDayCap)})
 	}
 	for k, minutes := range study {
 		xp := int(minutes/5) * xpStudyPer5Min

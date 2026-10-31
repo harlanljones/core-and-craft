@@ -209,6 +209,8 @@ func Validate(e Event, requireSeq bool) error {
 		add("subject: %s needs checkin:<slug>, got %q", e.Kind, e.Subject)
 	case strings.HasPrefix(e.Kind, "pillar.") && !strings.HasPrefix(e.Subject, "ask:"):
 		add("subject: %s needs ask:<slug>, got %q", e.Kind, e.Subject)
+	case e.Kind == "review.logged" && !strings.HasPrefix(e.Subject, "card:"):
+		add("subject: review.logged needs card:<slug>, got %q", e.Subject)
 	}
 	if e.Source.Via == "" {
 		add("source.via: required")
@@ -358,6 +360,25 @@ func validateData(e Event) []error {
 		}
 		if _, ok := m["title"]; ok {
 			text("title", 200)
+		}
+	case "review.logged":
+		// One FSRS review of card:<slug>, the recall: line of note:<slug>.
+		raw, ok := m["rating"]
+		var r float64
+		switch {
+		case !ok:
+			add("rating: required")
+		case json.Unmarshal(raw, &r) != nil || r != float64(int(r)) || r < 1 || r > 4:
+			add("rating: want 1 (again), 2 (hard), 3 (good) or 4 (easy), got %s", raw)
+		}
+		if raw, ok := m["duration_ms"]; ok {
+			var ms float64
+			if json.Unmarshal(raw, &ms) != nil || ms != float64(int64(ms)) || ms < 0 || ms > 86400000 {
+				add("duration_ms: want whole milliseconds, 0 to a day, got %s", raw)
+			}
+		}
+		if c, ok := str("card"); ok && c != e.Subject && "card:"+c != e.Subject {
+			add("card: %q is not %s", c, e.Subject)
 		}
 	case "quest.added":
 		text("title", 200)

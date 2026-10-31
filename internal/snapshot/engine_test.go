@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -262,6 +263,31 @@ func TestNoteXPOncePerNote(t *testing.T) {
 	l.add("note.added", "note:study", "manual", "2026-10-29", `{"path":"notes/competence/study.md","sha256":"`+sum+`"}`)                     // a new version: 0
 	l.add("note.added", "note:martin-luther", "duet:competence", "2026-10-29", `{"path":"notes/nodes/martin-luther.md","sha256":"`+sum+`"}`) // 0
 	if s := Build(l.evs, nil, Source{}, now, la); s.XP.Total != 15 {
+		t.Fatalf("total %d", s.XP.Total)
+	}
+}
+
+func TestReviewXP(t *testing.T) {
+	sum := strings.Repeat("0", 64)
+	l := &qlog{}
+	l.add("note.added", "note:great-schism", "manual", "2026-10-20", `{"path":"notes/nodes/great-schism.md","sha256":"`+sum+`"}`) // a node: 0
+	for i := 0; i < 12; i++ {
+		// Twelve cards on Oct 21 (eleven named by notes) cap at 20.
+		slug := fmt.Sprintf("c%d", i)
+		if i < 11 {
+			l.add("note.added", "note:"+slug, "manual", "2026-10-20", `{"path":"notes/nodes/`+slug+`.md","sha256":"`+sum+`"}`)
+		}
+		l.add("review.logged", "card:"+slug, "manual", "2026-10-21", `{"rating":3}`)
+	}
+	l.add("review.logged", "card:nobody", "duet:faith", "2026-10-22", `{"rating":4}`) // no note: 0
+	// Good on Oct 1, 4 and 15, about when each review made it due; the third
+	// takes stability past 21 days and the card matures.
+	l.add("review.logged", "card:great-schism", "duet:faith", "2026-10-01", `{"rating":3}`) // 2
+	l.add("review.logged", "card:great-schism", "manual", "2026-10-01", `{"rating":3}`)     // the same card again that day: 0
+	l.add("review.logged", "card:great-schism", "manual", "2026-10-04", `{"rating":3}`)     // 2
+	l.add("review.logged", "card:great-schism", "manual", "2026-10-15", `{"rating":3}`)     // 2, and 10 as it matures
+	s := Build(l.evs, nil, Source{}, now, la)
+	if s.XP.Total != 20+2+2+2+10 {
 		t.Fatalf("total %d", s.XP.Total)
 	}
 }

@@ -35,6 +35,14 @@ Widgets never read `events.jsonl`. They read `$ACTA_STATE/snapshot.json` (defaul
 
 `acta snapshot` also writes `$ACTA_STATE/graph.json` beside this file, the same way (temp file and rename): every node and edge. `new_7d` counts notes first logged in the last seven days, today included. Its shape is in `docs/knowledge-graph.md`. A widget that draws the graph reads `graph.json`; one that only shows counts reads this summary.
 
+### Recall cards (v1, additive)
+
+```json
+"cards": {"total": 13, "new": 8, "due": 2, "overdue": 0, "mature": 0, "reviewed_today": 3, "next_due": "2026-11-07"}
+```
+
+One card per note with a `recall:` line, scheduled by FSRS. `due` counts cards due today or earlier, new ones included; `next_due` is the earliest due date after today, absent when there is none. Each card's own schedule (`due`, `state`, `stability`, `retrievability`) is on its note's node in `graph.json`, under `card`. A review from a widget is `run("acta review card:<slug> --rating again|hard|good|easy --via board")`. See `docs/knowledge-graph.md`.
+
 ### The game (v1, additive)
 
 ```json

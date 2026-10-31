@@ -50,7 +50,7 @@ Fields:
 | `aliases` | other names, for search and for Obsidian. |
 | `pillars` | the pillars it belongs to, full lowercase words. The first is its colour on the board. Default: the folder's pillar, or the event's. |
 | `date` | when, for an event: `1517-10-31`, `1648`, `451`. |
-| `recall` | one question for spaced repetition. Reviews come in a later change; the field is read now so notes can carry it. |
+| `recall` | one question for spaced repetition. It makes the note a card (below). |
 | `private` | `true` keeps it off anything published. |
 | an edge type | one link or a list of links: `"[[slug]]"`, `"[[folder/slug\|label]]"`, or an id such as `skill:typing` or `pillar:faith`. |
 
@@ -165,11 +165,46 @@ A note earns 15 xp once, the first time its subject is logged under a pillar fol
 "graph": {"nodes": 74, "edges": 205, "notes": 64, "stubs": 0, "new_7d": 64, "errors": 0}
 ```
 
+## Reviews (FSRS)
+
+A note with a `recall:` line is a card, `card:<slug>`. Its front is the question; its back is the note. A review is one `review.logged` under the card's subject:
+
+```json
+{"v":1,"at":"2026-10-31","at_precision":"day","recorded_at":"2026-10-31T18:00:00Z","pillar":"faith","kind":"review.logged","subject":"card:great-schism","source":{"via":"chat","agent":"duet:faith"},"data":{"rating":3,"duration_ms":4200}}
+```
+
+- `rating` is required: 1 again, 2 hard, 3 good, 4 easy. `duration_ms` is optional. `card`, if present, must be the subject.
+- On this machine: `acta review` lists the due cards, `acta review --next` shows the next one with its question and its note, and `acta review card:<slug> --rating good` logs a review (`--duration-ms`, `--at`, `--pillar`, `--agent`, `--via` as for `acta log`). It refuses a card no note names. The pillar defaults to the note's first pillar.
+- From a Duet channel, a quiz in chat files its answers through the inbox like any other event. Ingest doesn't check that the card exists; a review of a card no note names stays in the log, earns nothing, and shows in `graph.json`'s problems and in `acta doctor`.
+
+acta folds every card's reviews with [go-fsrs](https://github.com/open-spaced-repetition/go-fsrs) v3 (FSRS-5 default weights, 90% target retention), in date order and then `seq`, so a quiz filed late still lands on its own day:
+
+- The long-term scheduler, with no same-day learning steps and no fuzz, so the same log and clock always give the same schedule.
+- A review counts at noon on its local date, whether it was logged with a day (chat) or a second (the board), so due dates are whole days.
+- A card with no reviews is new and due today. A card is mature once its stability reaches 21 days.
+
+`TestFoldMatchesGoFSRSReference` folds go-fsrs's own long-term reference sequence through `review.logged` events and gets its intervals, stability and difficulty back exactly.
+
+Each note node with a card carries it in `graph.json`:
+
+```json
+"card": {"id": "card:great-schism", "state": "review", "due": "2026-11-02", "stability": 3.173, "difficulty": 5.2824, "retrievability": 0.9918, "reps": 1, "lapses": 0, "last_review": "2026-10-30"}
+```
+
+`state` is `new`, `learning`, `review` or `relearning`; `retrievability` is the chance of recall now, on FSRS's forgetting curve, and `mature_on` appears once the card matures. `snapshot.json` carries a summary:
+
+```json
+"cards": {"total": 13, "new": 8, "due": 2, "overdue": 0, "mature": 0, "reviewed_today": 3, "next_due": "2026-11-07"}
+```
+
+`due` counts cards due today or earlier, new ones included; `next_due` is the earliest due date after today.
+
+Xp: the first review of a card each day earns 2, up to 20 a day per pillar, and a card earns 10 once, on the review that makes it mature. Both need the card's note in the log.
+
 ## Later
 
-- **Reviews (FSRS).** A note with `recall:` becomes `card:<slug>`. `review.logged` (`{card, rating 1..4, duration_ms}`, already in the envelope) is folded with go-fsrs into due cards and a memory strength per node. A review earns a small fixed xp with a daily cap. Reviews come from board taps (`acta review`) or from a channel's quiz in chat, through the inbox.
-- **The board.** A "Bibliotheca · Library" tile (cards due, new nodes this week) opens a full map on the two islands: pillar hubs on their own island, nodes coloured by pillar, sized by degree and dimmed as memory fades. A tapped node shows its links and the review buttons. acta will precompute positions into `graph.json` so the board only draws. A mockup comes first.
-- **SQLite.** Roadmap step 4 can load `graph.json` as tables when queries need it.
+- **The board.** A "Bibliotheca · Library" tile (cards due, new nodes this week) opens a full map on the two islands: pillar hubs on their own island, nodes coloured by pillar, sized by degree and dimmed by retrievability. A tapped node shows its links and, when due, Again, Hard, Good, Easy, each running `acta review card:<slug> --rating N --via board`. acta will precompute positions into `graph.json` so the board only draws. A mockup comes first.
+- **SQLite.** Roadmap step 4 can load `graph.json` as tables when a query needs it.
 
 ## Extraction by a language model (interface only)
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/harlanljones/core-and-craft/internal/event"
+	"github.com/harlanljones/core-and-craft/internal/review"
 )
 
 // FileName is graph.json, next to snapshot.json in $ACTA_STATE.
@@ -102,9 +103,12 @@ type Node struct {
 	Date    string   `json:"date,omitempty"`
 	Status  string   `json:"status,omitempty"`
 	Recall  string   `json:"recall,omitempty"`
-	Private bool     `json:"private,omitempty"`
-	Stub    bool     `json:"stub,omitempty"`
-	Degree  int      `json:"degree"`
+	// Card is the FSRS schedule of a note with a recall: line; acta fills
+	// it in from the reviews in the log.
+	Card    *review.Card `json:"card,omitempty"`
+	Private bool         `json:"private,omitempty"`
+	Stub    bool         `json:"stub,omitempty"`
+	Degree  int          `json:"degree"`
 }
 
 type Edge struct {
