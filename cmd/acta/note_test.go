@@ -284,3 +284,89 @@ func TestSnapshotWritesTheGraph(t *testing.T) {
 		t.Error("a body link that repeats a typed edge should not add mentions")
 	}
 }
+
+func TestNoteAddReadsPillarsLikeTheGraph(t *testing.T) {
+	e, _, _ := testEnv(t, nil)
+	mustRun(t, e, "init")
+	p := putNote(t, e, "notes/nodes/sola-fide.md", "---\ntype: concept\npillars: [ Faith ]\n---\nBy faith alone.\n")
+	mustRun(t, e, "note", "add", p)
+	b, _ := os.ReadFile(e.logPath())
+	if !strings.Contains(string(b), `"pillar":"faith"`) {
+		t.Fatalf("log %q", b)
+	}
+}
+
+// putNote writes a note under the data directory and returns its path.
+func putNote(t *testing.T, e env, rel, body string) string {
+	t.Helper()
+	p := filepath.Join(e.data, filepath.FromSlash(rel))
+	os.MkdirAll(filepath.Dir(p), 0o755)
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestNoteAddRefusesOneSlugInTwoFolders(t *testing.T) {
+	e, out, errb := testEnv(t, nil)
+	mustRun(t, e, "init")
+	a := putNote(t, e, "notes/faith/luther.md", luther)
+	mustRun(t, e, "note", "add", a)
+	b := putNote(t, e, "notes/nodes/luther.md", luther)
+
+	// The other folder's file is refused, and the log doesn't change.
+	errb.Reset()
+	if code := run(e, []string{"note", "add", b}); code != 1 {
+		t.Fatalf("exit %d, want refusal", code)
+	}
+	if s := errb.String(); !strings.Contains(s, "notes/nodes/luther.md") || !strings.Contains(s, "notes/faith/luther.md") || !strings.Contains(s, "one slug names one node") {
+		t.Fatalf("error %q", s)
+	}
+	if n := len(lineIDs(t, e)); n != 1 {
+		t.Fatalf("logged %d, want 1", n)
+	}
+
+	// Doctor names the pair once, and doesn't also call either unlogged.
+	out.Reset()
+	mustRun(t, e, "doctor")
+	s := out.String()
+	if !strings.Contains(s, "notes: slug luther is in 2 folders: notes/faith/luther.md, notes/nodes/luther.md; one slug names one node") || strings.Contains(s, "doesn't name; run") {
+		t.Fatalf("doctor %q", s)
+	}
+}
+
+func TestNoteAddMoveReplacesTheOldFile(t *testing.T) {
+	e, out, errb := testEnv(t, nil)
+	mustRun(t, e, "init")
+	old := putNote(t, e, "notes/faith/luther.md", luther)
+	mustRun(t, e, "note", "add", old)
+	first := lineIDs(t, e)[0]
+	nw := putNote(t, e, "notes/nodes/luther.md", luther+"A shared node now.\n")
+
+	// Without --move it is refused, and the error points at --move.
+	errb.Reset()
+	if code := run(e, []string{"note", "add", nw}); code != 1 || !strings.Contains(errb.String(), "--move") {
+		t.Fatalf("want refusal naming --move, got %d %q", code, errb)
+	}
+	if _, err := os.Stat(old); err != nil {
+		t.Fatal("refusal removed the old file")
+	}
+
+	mustRun(t, e, "note", "add", "--move", nw)
+	if _, err := os.Stat(old); !os.IsNotExist(err) {
+		t.Fatalf("old file still there: %v", err)
+	}
+	if !fileExists(e.versionPath(sumHex([]byte(luther)))) {
+		t.Fatal("old body not kept in note-versions")
+	}
+	b, _ := os.ReadFile(e.logPath())
+	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
+	if len(lines) != 2 || !strings.Contains(lines[1], `"path":"notes/nodes/luther.md"`) || !strings.Contains(lines[1], `"supersedes":"`+first+`"`) {
+		t.Fatalf("log %q", b)
+	}
+	out.Reset()
+	mustRun(t, e, "doctor")
+	if !strings.Contains(out.String(), "notes: ok, 1 logged") {
+		t.Fatalf("doctor %q", out)
+	}
+}
