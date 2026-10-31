@@ -2,6 +2,8 @@
 
 CORE & CRAFT, a life framework of nine pillars (Career, Outlook, Relationships, Economic; Competence, Recovery, Agents, Faith, Time), with **acta** ("things done": the record) as its one writer and an Omarchy desktop board as its face.
 
+The [consolidated framework](docs/research/CORE-CRAFT-framework-v4.md) includes personal operating standards and links to the three research-audited iterations.
+
 One rule: agents only record what happened, and arithmetic decides progress. An append-only `events.jsonl` plus markdown notes is the source of truth. `acta` is the only writer and folds the log into `snapshot.json` for the widgets.
 
 ## Quick start (diocletian)
