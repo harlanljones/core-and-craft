@@ -179,6 +179,8 @@ A note earns 15 xp once, on the date and pillar of the first time its subject is
 
 ## Extraction by a language model (interface only)
 
+Proposed replacement: `docs/decisions/0004-notes-outbox-and-proposed-nodes.md` has the pillar channels do the extraction and file proposals through the inbox, reading what is known from a Drive outbox. Until it is accepted, this section stands.
+
 A separate engine (OpenRouter, the Anthropic API or a local model) may split study notes into nodes. Nothing here builds it. The request acta would make:
 
 ```json
