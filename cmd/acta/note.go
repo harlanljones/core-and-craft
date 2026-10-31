@@ -50,33 +50,55 @@ func noteRef(ev event.Event) (path, sum string) {
 	return d.Path, d.SHA256
 }
 
-// placement is one note body ingest writes under notes/.
+// placement is one note body ingest writes under notes/, or beside them in
+// note-versions/.
 type placement struct {
 	dst, sum string
 	body     []byte
 	from     string // inbox/<sha256>.md to remove afterwards, or ""
+	aside    bool   // dst holds edits the log doesn't name: keep the body in note-versions/
 }
+
+// versionsDir holds note bodies the log names that aren't at their path: a
+// version another replaced, or one that arrived while the file held edits
+// the log doesn't name. Each is <sha256>.md, so every logged version stays
+// readable.
+func (e env) versionsDir() string { return filepath.Join(e.data, "note-versions") }
+
+// versionPath is where versionsDir keeps the body with this sha256.
+func (e env) versionPath(sum string) string { return filepath.Join(e.versionsDir(), sum+".md") }
 
 // planNotes finds the body of every note.added in evs that names a file.
 // A body is looked for, in order, as <dir>/<sha256>.md, inbox/<sha256>.md,
 // <dir>/<path> (only for a file named on the command line, such as the seed)
 // and the note already in place. It must hash to the event's sha256.
 //
+// The latest version filed wins the path, whether or not it supersedes the
+// one there: two channels may both write a shared node. The version it
+// replaces moves to note-versions/. A file that holds edits the log doesn't
+// name is never replaced; the arriving version goes to note-versions/
+// instead, and doctor says to merge. An event already logged never replaces
+// a file, so a duplicate can't roll a note back.
+//
 // waiting counts bodies not found yet. For an inbox file that defers the
 // whole file; a file named on the command line is logged anyway, with a
-// warning. errs reject the file: a body under the wrong name, or a path that
-// already holds another version the event does not supersede.
+// warning. errs reject the file: a body under the wrong name.
 func planNotes(e env, dir string, evs []event.Event, logged []event.Event, remote bool) (plans []placement, waiting int, errs []error) {
-	known := map[string]string{} // event id -> sha256 it names
-	for _, ev := range logged {
-		if _, sum := noteRef(ev); sum != "" {
-			known[ev.ID] = sum
+	seen := map[string]bool{}                // event ids already in the log
+	versions := map[string]map[string]bool{} // path -> sha256s the log names for it
+	sumOf := map[string]string{}             // event id -> sha256 it names
+	know := func(ev event.Event) {
+		if path, sum := noteRef(ev); sum != "" {
+			sumOf[ev.ID] = sum
+			if versions[path] == nil {
+				versions[path] = map[string]bool{}
+			}
+			versions[path][sum] = true
 		}
 	}
-	for _, ev := range evs {
-		if _, sum := noteRef(ev); sum != "" {
-			known[ev.ID] = sum
-		}
+	for _, ev := range logged {
+		seen[ev.ID] = true
+		know(ev)
 	}
 	current := map[string]string{} // dst -> sha256 of what will be there
 	for i, ev := range evs {
@@ -94,7 +116,7 @@ func planNotes(e env, dir string, evs []event.Event, logged []event.Event, remot
 		if !remote {
 			cands = append(cands, filepath.Join(dir, filepath.FromSlash(path)))
 		}
-		cands = append(cands, dst)
+		cands = append(cands, dst, e.versionPath(sum))
 		for j, c := range cands {
 			b, err := os.ReadFile(c)
 			if err != nil {
@@ -124,46 +146,87 @@ func planNotes(e env, dir string, evs []event.Event, logged []event.Event, remot
 				have = sumHex(b)
 			}
 		}
-		if have != "" && have != sum && (ev.Supersedes == "" || known[ev.Supersedes] != have) {
-			errs = append(errs, fmt.Errorf("event %d (%s): %s holds another version; a new version must supersede the note.added for it", i+1, ev.Subject, path))
+		p := placement{dst: dst, sum: sum, body: body, from: from}
+		switch {
+		case have == "" || have == sum:
+		case seen[ev.ID]:
+			// Logged already: a duplicate never rolls the note back.
+			plans = append(plans, placement{from: from})
 			continue
+		case !versions[path][have]:
+			p.aside = true
+			fmt.Fprintf(e.stderr, "acta: %s has edits the log doesn't name; kept them and saved %s's version as %s\n",
+				path, ev.Source.Agent, filepath.ToSlash(filepath.Join(filepath.Base(e.versionsDir()), sum+".md")))
+		case sumOf[ev.Supersedes] != have:
+			fmt.Fprintf(e.stderr, "acta: %s: %s's version replaces one it doesn't supersede; that one is in %s\n",
+				path, ev.Source.Agent, filepath.ToSlash(filepath.Join(filepath.Base(e.versionsDir()), have+".md")))
 		}
-		current[dst] = sum
-		plans = append(plans, placement{dst: dst, sum: sum, body: body, from: from})
+		know(ev)
+		if !p.aside {
+			current[dst] = sum
+		}
+		plans = append(plans, p)
 	}
 	return plans, waiting, errs
 }
 
 // placeNotes writes each body by temp file and rename, so a reader never
-// sees half a note.
-func placeNotes(plans []placement) error {
+// sees half a note. A version it replaces moves to note-versions/ first.
+func placeNotes(e env, plans []placement) error {
 	for _, p := range plans {
-		if b, err := os.ReadFile(p.dst); err == nil && sumHex(b) == p.sum {
+		switch {
+		case p.dst == "":
+			continue
+		case p.aside:
+			if err := writeBody(e.versionPath(p.sum), p.sum, p.body); err != nil {
+				return err
+			}
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(p.dst), 0o755); err != nil {
+		b, err := os.ReadFile(p.dst)
+		if err == nil {
+			old := sumHex(b)
+			if old == p.sum {
+				continue
+			}
+			if err := writeBody(e.versionPath(old), old, b); err != nil {
+				return err
+			}
+		}
+		if err := writeBody(p.dst, p.sum, p.body); err != nil {
 			return err
-		}
-		tmp, err := os.CreateTemp(filepath.Dir(p.dst), ".note-*.part")
-		if err != nil {
-			return err
-		}
-		_, werr := tmp.Write(p.body)
-		if serr := tmp.Sync(); werr == nil {
-			werr = serr
-		}
-		if cerr := tmp.Close(); werr == nil {
-			werr = cerr
-		}
-		if werr == nil {
-			werr = os.Rename(tmp.Name(), p.dst)
-		}
-		if werr != nil {
-			os.Remove(tmp.Name())
-			return werr
 		}
 	}
 	return nil
+}
+
+// writeBody writes b to dst by temp file and rename, unless dst already
+// holds it.
+func writeBody(dst, sum string, b []byte) error {
+	if have, err := os.ReadFile(dst); err == nil && sumHex(have) == sum {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(dst), ".note-*.part")
+	if err != nil {
+		return err
+	}
+	_, werr := tmp.Write(b)
+	if serr := tmp.Sync(); werr == nil {
+		werr = serr
+	}
+	if cerr := tmp.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr == nil {
+		werr = os.Rename(tmp.Name(), dst)
+	}
+	if werr != nil {
+		os.Remove(tmp.Name())
+	}
+	return werr
 }
 
 // liveNotes is the latest live note.added per subject, in subject order,
@@ -217,6 +280,9 @@ func graphInput(e env, evs []event.Event, s snapshot.Snapshot) graph.Input {
 			} else {
 				n.Content = b
 				n.Mismatch = sumHex(b) != sum
+				if n.Mismatch && fileExists(e.versionPath(sum)) {
+					n.Saved = filepath.ToSlash(filepath.Join(filepath.Base(e.versionsDir()), sum+".md"))
+				}
 			}
 		}
 		in.Notes = append(in.Notes, n)
@@ -363,6 +429,11 @@ func cmdNote(e env, args []string) error {
 	return nil
 }
 
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+
 func contains(list []string, s string) bool {
 	for _, v := range list {
 		if v == s {
@@ -416,7 +487,7 @@ func checkNotes(e env, r *routeReport) {
 	}
 	notes, _ := liveNotes(evs, e.loc)
 	named := map[string]bool{}
-	var missing, changed []string
+	var missing, changed, unmerged []string
 	for _, ev := range notes {
 		path, sum := noteRef(ev)
 		if path == "" {
@@ -427,7 +498,10 @@ func checkNotes(e env, r *routeReport) {
 		switch {
 		case err != nil:
 			missing = append(missing, path)
-		case sumHex(b) != sum:
+		case sumHex(b) == sum:
+		case fileExists(e.versionPath(sum)):
+			unmerged = append(unmerged, path)
+		default:
 			changed = append(changed, path)
 		}
 	}
@@ -448,10 +522,13 @@ func checkNotes(e env, r *routeReport) {
 	if len(changed) > 0 {
 		r.warn("notes: %d note(s) changed since logged; run acta note add %s", len(changed), strings.Join(changed, " "))
 	}
+	if len(unmerged) > 0 {
+		r.warn("notes: %d note(s) hold edits the log doesn't name, and the logged version waits in %s/<sha256>.md; merge it in, then run acta note add %s", len(unmerged), filepath.Base(e.versionsDir()), strings.Join(unmerged, " "))
+	}
 	if len(unlogged) > 0 {
 		r.warn("notes: %d note(s) the log doesn't name; run acta note add %s", len(unlogged), strings.Join(unlogged, " "))
 	}
-	if len(waitingFiles)+len(orphans)+len(missing)+len(changed)+len(unlogged) == 0 {
+	if len(waitingFiles)+len(orphans)+len(missing)+len(changed)+len(unmerged)+len(unlogged) == 0 {
 		r.ok("notes: ok, %d logged", len(named))
 	}
 }

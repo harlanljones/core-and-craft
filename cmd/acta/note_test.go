@@ -26,12 +26,17 @@ Posted the [[ninety-five-theses]] in 1517; see also [[john-calvin]].
 // noteLine is a note.added inbox line naming path and the sha256 of body.
 func noteLine(t *testing.T, slug, path, body, supersedes string) string {
 	t.Helper()
+	return noteLineAs(t, "duet:competence", slug, path, body, supersedes)
+}
+
+func noteLineAs(t *testing.T, agent, slug, path, body, supersedes string) string {
+	t.Helper()
 	sup := ""
 	if supersedes != "" {
 		sup = fmt.Sprintf(`,"supersedes":%q`, supersedes)
 	}
-	return fmt.Sprintf(`{"v":1,"at":"2026-10-29","at_precision":"day","recorded_at":"2026-10-29T18:00:00Z","pillar":"faith","kind":"note.added","subject":"note:%s","source":{"via":"chat","agent":"duet:competence"},"data":{"path":%q,"sha256":%q,"title":"x"}%s}`,
-		slug, path, sumHex([]byte(body)), sup)
+	return fmt.Sprintf(`{"v":1,"at":"2026-10-29","at_precision":"day","recorded_at":"2026-10-29T18:00:00Z","pillar":"faith","kind":"note.added","subject":"note:%s","source":{"via":"chat","agent":%q},"data":{"path":%q,"sha256":%q,"title":"x"}%s}`,
+		slug, agent, path, sumHex([]byte(body)), sup)
 }
 
 func TestInboxPullPlacesNoteBodies(t *testing.T) {
@@ -47,13 +52,13 @@ func TestInboxPullPlacesNoteBodies(t *testing.T) {
 		t.Fatalf("logged %d before the body arrived", n)
 	}
 	d.add(sum+".md", "IDBODY", luther)
+	// A .md not named by its sha256 is skipped, not failed: acta never
+	// deletes it from Drive, so failing would fail every run.
 	d.add("notes.md", "IDBAD", "not a body name")
 	out.Reset()
-	if code := run(e, []string{"inbox", "pull"}); code != 1 {
-		t.Fatalf("a refused name should fail the run, got %d", code)
-	}
-	if !strings.Contains(errb.String(), `refused "notes.md"`) {
-		t.Fatalf("stderr %q", errb)
+	mustRun(t, e, "inbox", "pull")
+	if !strings.Contains(errb.String(), `skipped "notes.md"`) || !strings.Contains(out.String(), "1 skipped") {
+		t.Fatalf("out %q err %q", out, errb)
 	}
 	got, err := os.ReadFile(filepath.Join(e.data, "notes", "nodes", "martin-luther.md"))
 	if err != nil || string(got) != luther {
@@ -67,33 +72,97 @@ func TestInboxPullPlacesNoteBodies(t *testing.T) {
 	}
 }
 
-func TestIngestRefusesAnUnsupersededVersion(t *testing.T) {
+// stageNote puts an envelope file and its body in the inbox.
+func stageNote(t *testing.T, e env, name, line, body string) {
+	t.Helper()
+	os.WriteFile(filepath.Join(e.inboxDir(), name), []byte(line+"\n"), 0o644)
+	os.WriteFile(filepath.Join(e.inboxDir(), sumHex([]byte(body))+".md"), []byte(body), 0o644)
+}
+
+func readNote(t *testing.T, e env, path string) string {
+	t.Helper()
+	b, _ := os.ReadFile(filepath.Join(e.data, filepath.FromSlash(path)))
+	return string(b)
+}
+
+// Two channels can both write a shared node: neither knows the other's
+// event id, so the latest version wins the path and the one it replaces
+// stays readable in note-versions/.
+func TestIngestTakesAnotherChannelsVersion(t *testing.T) {
 	e, _, errb := testEnv(t, nil)
 	mustRun(t, e, "init")
 	path := "notes/nodes/martin-luther.md"
 	v1, v2 := luther, luther+"Also translated the Bible.\n"
-	stage := func(name, line, body string) {
-		os.WriteFile(filepath.Join(e.inboxDir(), name), []byte(line+"\n"), 0o644)
-		os.WriteFile(filepath.Join(e.inboxDir(), sumHex([]byte(body))+".md"), []byte(body), 0o644)
-	}
-	stage("a.jsonl", noteLine(t, "martin-luther", path, v1, ""), v1)
+	stageNote(t, e, "a.jsonl", noteLineAs(t, "duet:competence", "martin-luther", path, v1, ""), v1)
 	mustRun(t, e, "ingest")
-
-	// A second version that doesn't supersede the first is rejected.
-	stage("b.jsonl", noteLine(t, "martin-luther", path, v2, ""), v2)
-	if code := run(e, []string{"ingest"}); code != 1 {
-		t.Fatal("want rejection")
+	stageNote(t, e, "b.jsonl", noteLineAs(t, "duet:faith", "martin-luther", path, v2, ""), v2)
+	mustRun(t, e, "ingest")
+	if got := readNote(t, e, path); got != v2 {
+		t.Fatalf("note %q", got)
 	}
-	if !strings.Contains(errb.String(), "holds another version") {
+	if b, err := os.ReadFile(e.versionPath(sumHex([]byte(v1)))); err != nil || string(b) != v1 {
+		t.Fatalf("replaced version not kept: %q, %v", b, err)
+	}
+	if !strings.Contains(errb.String(), "duet:faith's version replaces one it doesn't supersede") {
 		t.Fatalf("stderr %q", errb)
 	}
+	if n := logCount(t, e); n != 2 {
+		t.Fatalf("logged %d", n)
+	}
 
-	// The same version superseding the first replaces the file.
-	first := lineIDs(t, e)[0]
-	stage("c.jsonl", noteLine(t, "martin-luther", path, v2, first), v2)
+	// The first file delivered again never rolls the note back.
+	stageNote(t, e, "a2.jsonl", noteLineAs(t, "duet:competence", "martin-luther", path, v1, ""), v1)
 	mustRun(t, e, "ingest")
-	got, _ := os.ReadFile(filepath.Join(e.data, path))
-	if string(got) != v2 {
+	if got := readNote(t, e, path); got != v2 {
+		t.Fatalf("a duplicate rolled the note back: %q", got)
+	}
+	if left, _ := filepath.Glob(filepath.Join(e.inboxDir(), "*.*")); len(left) != 0 {
+		t.Fatalf("inbox not empty: %v", left)
+	}
+}
+
+// Edits made in Obsidian and not yet logged are never overwritten: the
+// arriving version waits in note-versions/ and doctor says to merge.
+func TestIngestKeepsUnloggedEdits(t *testing.T) {
+	e, out, _ := testEnv(t, nil)
+	mustRun(t, e, "init")
+	path := "notes/nodes/martin-luther.md"
+	v1, local, v2 := luther, luther+"My own note.\n", luther+"Also translated the Bible.\n"
+	stageNote(t, e, "a.jsonl", noteLine(t, "martin-luther", path, v1, ""), v1)
+	mustRun(t, e, "ingest")
+	os.WriteFile(filepath.Join(e.data, path), []byte(local), 0o644)
+	stageNote(t, e, "b.jsonl", noteLine(t, "martin-luther", path, v2, lineIDs(t, e)[0]), v2)
+	mustRun(t, e, "ingest")
+	if got := readNote(t, e, path); got != local {
+		t.Fatalf("local edits overwritten: %q", got)
+	}
+	if b, _ := os.ReadFile(e.versionPath(sumHex([]byte(v2)))); string(b) != v2 {
+		t.Fatalf("arriving version not kept: %q", b)
+	}
+	out.Reset()
+	mustRun(t, e, "doctor")
+	if !strings.Contains(out.String(), "hold edits the log doesn't name") || !strings.Contains(out.String(), "run acta note add "+path) {
+		t.Fatalf("doctor %q", out)
+	}
+	mustRun(t, e, "snapshot")
+	b, _ := os.ReadFile(e.graphPath())
+	if !strings.Contains(string(b), "the logged version is in note-versions/"+sumHex([]byte(v2))+".md") {
+		t.Fatalf("graph %s", b)
+	}
+}
+
+// A retracted note's file stays on disk; filing the note again replaces it.
+func TestIngestRefilesARetractedNote(t *testing.T) {
+	e, _, _ := testEnv(t, nil)
+	mustRun(t, e, "init")
+	path := "notes/nodes/martin-luther.md"
+	v1, v2 := luther, luther+"Also translated the Bible.\n"
+	stageNote(t, e, "a.jsonl", noteLine(t, "martin-luther", path, v1, ""), v1)
+	mustRun(t, e, "ingest")
+	mustRun(t, e, "retract", lineIDs(t, e)[0], "--agent", "manual")
+	stageNote(t, e, "b.jsonl", noteLine(t, "martin-luther", path, v2, ""), v2)
+	mustRun(t, e, "ingest")
+	if got := readNote(t, e, path); got != v2 {
 		t.Fatalf("note %q", got)
 	}
 }

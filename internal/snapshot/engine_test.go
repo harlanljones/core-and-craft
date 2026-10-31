@@ -265,3 +265,32 @@ func TestNoteXPOncePerNote(t *testing.T) {
 		t.Fatalf("total %d", s.XP.Total)
 	}
 }
+
+// A new version doesn't move a note's xp: it stays on the first version's
+// date and pillar, even when the note moves to notes/nodes/.
+func TestNoteXPStaysWithTheFirstVersion(t *testing.T) {
+	sum := strings.Repeat("0", 64)
+	l := &qlog{}
+	v1 := l.add("note.added", "note:study", "duet:competence", "2026-10-20", `{"path":"notes/competence/study.md","sha256":"`+sum+`"}`)
+	v2 := l.add("note.added", "note:study", "manual", "2026-10-29", `{"path":"notes/nodes/study.md","sha256":"`+sum+`"}`)
+	l.evs[1].Pillar, l.evs[1].Supersedes = "faith", v1
+	s := Build(l.evs, nil, Source{}, now, la)
+	if s.XP.Total != 15 || s.History[len(s.History)-1] != 0 {
+		t.Fatalf("total %d, today %d", s.XP.Total, s.History[len(s.History)-1])
+	}
+	for _, p := range s.Pillars {
+		if p.Pillar == "competence" && p.XP != 15 || p.Pillar == "faith" && p.XP != 0 {
+			t.Fatalf("%s xp %d", p.Pillar, p.XP)
+		}
+	}
+	// Retracting the live version brings back the first; still 15. Retract
+	// both and the note earns nothing.
+	l.retract(v2)
+	if s := Build(l.evs, nil, Source{}, now, la); s.XP.Total != 15 {
+		t.Fatalf("after retracting v2: %d", s.XP.Total)
+	}
+	l.retract(v1)
+	if s := Build(l.evs, nil, Source{}, now, la); s.XP.Total != 0 {
+		t.Fatalf("after retracting both: %d", s.XP.Total)
+	}
+}
