@@ -153,6 +153,24 @@ func Slug(s string) string {
 // slug, or an id such as skill:typing or pillar:faith. ok is false for an
 // empty value.
 func Target(v string) (string, bool) {
+	v = linkName(v)
+	if refRe.MatchString(v) {
+		return v, true
+	}
+	if i := strings.LastIndex(v, "/"); i >= 0 {
+		v = v[i+1:]
+	}
+	if isFile(v) {
+		return "", false
+	}
+	if s := Slug(v); s != "" {
+		return "note:" + s, true
+	}
+	return "", false
+}
+
+// linkName strips the brackets, the |label, the #heading and a .md suffix.
+func linkName(v string) string {
 	v = strings.TrimSpace(v)
 	if strings.HasPrefix(v, "[[") && strings.HasSuffix(v, "]]") {
 		v = v[2 : len(v)-2]
@@ -160,17 +178,33 @@ func Target(v string) (string, bool) {
 	if i := strings.IndexAny(v, "|#"); i >= 0 {
 		v = v[:i]
 	}
-	v = strings.TrimSuffix(strings.TrimSpace(v), ".md")
-	if refRe.MatchString(v) {
-		return v, true
+	return strings.TrimSuffix(strings.TrimSpace(v), ".md")
+}
+
+// fileExts are the attachments a link or an embed can name. Such a target
+// is a file, never a note. Only these count, so a title such as "Node.js"
+// or "Genesis 1.1" still reads as a note.
+var fileExts = map[string]bool{
+	"png": true, "jpg": true, "jpeg": true, "gif": true, "svg": true, "webp": true,
+	"bmp": true, "avif": true, "heic": true, "pdf": true, "mp3": true, "m4a": true,
+	"wav": true, "ogg": true, "flac": true, "mp4": true, "webm": true, "mov": true,
+	"mkv": true, "canvas": true, "base": true, "excalidraw": true, "docx": true,
+	"pptx": true, "xlsx": true, "csv": true, "txt": true, "zip": true,
+}
+
+// isFile reports whether name ends in a file extension other than .md.
+func isFile(name string) bool {
+	i := strings.LastIndex(name, ".")
+	return i > 0 && fileExts[strings.ToLower(name[i+1:])]
+}
+
+// isFileLink reports whether a link value names a file, not a note.
+func isFileLink(v string) bool {
+	name := linkName(v)
+	if refRe.MatchString(name) {
+		return false
 	}
-	if i := strings.LastIndex(v, "/"); i >= 0 {
-		v = v[i+1:]
-	}
-	if s := Slug(v); s != "" {
-		return "note:" + s, true
-	}
-	return "", false
+	return isFile(name[strings.LastIndex(name, "/")+1:])
 }
 
 func isLink(v string) bool { return strings.Contains(v, "[[") }
@@ -328,12 +362,16 @@ func Build(in Input, builtAt string) Graph {
 			for _, v := range vals {
 				if to, ok := Target(v); ok {
 					link(n.ID, to, typ, "frontmatter")
+				} else if isFileLink(v) {
+					problem(nt.ID, "%s: %s is a file, not a note", k, v)
 				}
 			}
 		}
 	}
 	for _, b := range bodies {
-		for _, m := range bodyLinkRe.FindAllStringSubmatch(b.body, -1) {
+		// Links in code are text, not links. An embed of a file has no note
+		// to point at (Target skips it); an embed of a note counts as a mention.
+		for _, m := range bodyLinkRe.FindAllStringSubmatch(stripCode(b.body), -1) {
 			to, ok := Target(m[1])
 			if !ok || typed[[2]string{b.id, to}] {
 				continue
@@ -372,6 +410,93 @@ func Build(in Input, builtAt string) Graph {
 	})
 	sort.SliceStable(g.Errors, func(i, j int) bool { return g.Errors[i].ID < g.Errors[j].ID })
 	return g
+}
+
+// stripCode blanks out fenced code blocks and inline code spans, so a
+// [[link]] shown as an example isn't read as one.
+func stripCode(body string) string {
+	var out strings.Builder
+	fence := "" // the opening fence while inside a block
+	for _, l := range strings.Split(body, "\n") {
+		t := strings.TrimLeft(l, " \t")
+		switch {
+		case fence != "":
+			if strings.HasPrefix(t, fence) && strings.Trim(t, fence[:1]+" \t") == "" {
+				fence = ""
+			}
+		case openFence(t) != "":
+			fence = openFence(t)
+		default:
+			out.WriteString(l)
+		}
+		out.WriteByte('\n')
+	}
+	return stripSpans(out.String())
+}
+
+// openFence returns the ``` or ~~~ run that opens a code block on this line.
+func openFence(t string) string {
+	if t == "" || (t[0] != '`' && t[0] != '~') {
+		return ""
+	}
+	n := 0
+	for n < len(t) && t[n] == t[0] {
+		n++
+	}
+	// ```a``` is an inline span, not a fence.
+	if n < 3 || (t[0] == '`' && strings.Contains(t[n:], "`")) {
+		return ""
+	}
+	return t[:n]
+}
+
+// stripSpans replaces `code` spans with a space. A span closes on a run of
+// the same number of backticks and doesn't cross a blank line.
+func stripSpans(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		if s[i] != '`' {
+			b.WriteByte(s[i])
+			i++
+			continue
+		}
+		n := 0
+		for i+n < len(s) && s[i+n] == '`' {
+			n++
+		}
+		end := closeSpan(s[i+n:], n)
+		if end < 0 {
+			b.WriteString(s[i : i+n])
+			i += n
+			continue
+		}
+		b.WriteByte(' ')
+		i += n + end + n
+	}
+	return b.String()
+}
+
+// closeSpan finds a run of exactly n backticks in rest, up to the next
+// blank line. It returns the run's offset, or -1.
+func closeSpan(rest string, n int) int {
+	if i := strings.Index(rest, "\n\n"); i >= 0 {
+		rest = rest[:i]
+	}
+	for j := 0; j < len(rest); {
+		if rest[j] != '`' {
+			j++
+			continue
+		}
+		m := 0
+		for j+m < len(rest) && rest[j+m] == '`' {
+			m++
+		}
+		if m == n {
+			return j
+		}
+		j += m
+	}
+	return -1
 }
 
 func firstHeading(body string) string {

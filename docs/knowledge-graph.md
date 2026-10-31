@@ -54,7 +54,7 @@ Fields:
 | `private` | `true` keeps it off anything published. |
 | an edge type | one link or a list of links: `"[[slug]]"`, `"[[folder/slug\|label]]"`, or an id such as `skill:typing` or `pillar:faith`. |
 
-Any `[[link]]` in the body becomes a `mentions` edge, unless a typed edge already joins the same two nodes. Other keys (Obsidian's own, `tags`, a created date) are ignored. An unknown key that holds `[[links]]` becomes `related` edges, with a problem listed in `graph.json`.
+Any `[[link]]` in the body becomes a `mentions` edge, unless a typed edge already joins the same two nodes. Links inside code (fenced blocks and `` `inline code` ``) are text, not links. A link to a file (`![[diagram.png]]`, `[[paper.pdf]]`) is never a note: the body skips it, and a frontmatter value that names one is skipped with a problem listed. An embed of a note (`![[other-note]]`) counts as a mention. An edge key may also hold unquoted links (`teaches: [[a]], [[b]]` or `teaches: [[[a]], [[b]]]`); a value acta can't read as links is skipped with a problem listed. Other keys (Obsidian's own, `tags`, a created date) are ignored. An unknown key that holds `[[links]]` becomes `related` edges, with a problem listed in `graph.json`.
 
 acta reads the part of YAML that Obsidian's properties write: `key: value`, quoted values, `[a, b]` lists and `- item` lists. A nested map is skipped with a problem listed. A note with no frontmatter is fine: it's a `subject` note with links from its body only.
 
