@@ -113,11 +113,17 @@ name = hashlib.sha256(body).hexdigest() + ".md"   # upload the body under this n
 - writes it to `notes/<folder>/<slug>.md` (temp file and rename);
 - appends the events and removes both files from `inbox/`.
 
-If the envelope file arrives before a body, it waits in `inbox/` and the next run tries again. It isn't rejected; `acta doctor` warns after an hour. A body under the wrong name, or a path that already holds another version (below), rejects the whole file as any bad line does.
+If the envelope file arrives before a body, it waits in `inbox/` and the next run tries again. It isn't rejected; `acta doctor` warns after an hour. A body that doesn't hash to its name rejects the whole file as any bad line does. A `.md` in the Drive folder not named `<sha256>.md` is skipped (acta never deletes from Drive, so failing on it would fail every pull).
 
 ### A new version
 
-Write the whole note again and file a `note.added` with `supersedes` set to the id of the event for the version it replaces. acta replaces a note file only then: if the path holds a version that the new event doesn't supersede, the file is rejected. Retract a note with `acta retract <id>`; the file stays on disk and `acta doctor` lists it as not logged.
+Write the whole note again and file a `note.added`, with `supersedes` set to the id of the event for the version it replaces when you know it. The latest version filed takes the path either way, because two channels may both write a shared node and neither knows the other's event ids. Nothing is lost:
+
+- The version it replaces moves to `note-versions/<sha256>.md`, so every version the log names stays readable. Ingest says so when the new event doesn't supersede the one it replaced: two writers, worth a look.
+- A file that holds edits the log doesn't name (made in Obsidian, not yet `acta note add`ed) is never replaced. The arriving version is logged and waits in `note-versions/<sha256>.md`; `acta doctor` and `graph.json`'s problems say to merge it in and run `acta note add`.
+- An event already in the log never replaces a file, so a file delivered twice can't roll a note back.
+
+Retract a note with `acta retract <id>`; the file stays on disk and `acta doctor` lists it as not logged. Filing it again replaces that file.
 
 ### On this machine (Obsidian)
 
@@ -133,7 +139,7 @@ logs the file as it is now, superseding the version the log had (`--pillar`, `--
 
 ## Xp
 
-A note earns 15 xp once, the first time its subject is logged under a pillar folder. A new version earns nothing more. A shared node in `notes/nodes/` earns nothing: it's split out of a note that already earned it.
+A note earns 15 xp once, on the date and pillar of the first time its subject is logged under a pillar folder. A new version earns nothing more and doesn't move it, even when it supersedes the first or moves the note to `notes/nodes/`. A shared node filed only in `notes/nodes/` earns nothing: it's split out of a note that already earned it. Retracting every version takes the xp back.
 
 ## graph.json
 

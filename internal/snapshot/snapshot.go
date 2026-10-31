@@ -454,7 +454,7 @@ func Build(evs []event.Event, bad []store.LineError, src Source, now time.Time, 
 		questByID[q.ID] = q
 	}
 	var perPillar map[string]Level
-	gs := gains(live, xpInputs{runsByDay: runsByDay, skills: snap.Skills, quests: questByID}, loc)
+	gs := gains(live, xpInputs{runsByDay: runsByDay, skills: snap.Skills, quests: questByID, notes: firstNotes(evs)}, loc)
 	snap.XP, perPillar, snap.History = rollUp(gs, todayT)
 	snap.LeveledToday = leveledToday(gs, todayT)
 	for i := range snap.Pillars {

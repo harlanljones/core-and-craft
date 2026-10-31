@@ -76,6 +76,7 @@ type Note struct {
 	Content  []byte // nil when the file is missing
 	Mismatch bool   // the file is not the version the log names
 	Missing  bool
+	Saved    string // where the logged version waits when the file holds other edits
 }
 
 // Ref is a skill or quest from the snapshot.
@@ -236,6 +237,8 @@ func Build(in Input, builtAt string) Graph {
 		switch {
 		case nt.Missing:
 			problem(nt.ID, "%s is missing; the log names it", nt.Path)
+		case nt.Mismatch && nt.Saved != "":
+			problem(nt.ID, "%s has edits the log doesn't name; the logged version is in %s: merge it in, then run acta note add %s", nt.Path, nt.Saved, nt.Path)
 		case nt.Mismatch:
 			problem(nt.ID, "%s changed since it was logged: run acta note add %s", nt.Path, nt.Path)
 		}

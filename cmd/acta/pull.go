@@ -109,13 +109,22 @@ func cmdInboxPull(e env, args []string) error {
 		}
 	}
 
-	fetched, already, failed := 0, 0, 0
+	fetched, already, failed, skipped := 0, 0, 0, 0
 	for _, f := range files {
 		if f.IsDir {
 			continue
 		}
 		if _, ok := seen[f.ID]; ok && f.ID != "" {
 			already++
+			continue
+		}
+		if strings.HasSuffix(f.Path, ".md") && !bodyNameRe.MatchString(f.Path) {
+			// Only a note body, <sha256>.md, is fetched. Another .md (a
+			// body under its slug, say) is skipped, not failed: acta never
+			// deletes from Drive, so it would fail every run until removed
+			// by hand. Its envelope file waits, and doctor warns.
+			fmt.Fprintf(e.stderr, "acta: inbox pull: skipped %q: a note body is named <sha256>.md\n", f.Path)
+			skipped++
 			continue
 		}
 		if err := checkRemoteName(f); err != nil {
@@ -151,7 +160,11 @@ func cmdInboxPull(e env, args []string) error {
 		fmt.Fprintf(e.stdout, "inbox pull: dry run, %d to fetch, %d already seen, %d refused\n", fetched, already, failed)
 		return nil
 	}
-	fmt.Fprintf(e.stdout, "inbox pull: %d new, %d already seen, %d failed\n", fetched, already, failed)
+	skip := ""
+	if skipped > 0 {
+		skip = fmt.Sprintf(", %d skipped", skipped)
+	}
+	fmt.Fprintf(e.stdout, "inbox pull: %d new, %d already seen, %d failed%s\n", fetched, already, failed, skip)
 
 	var errs []error
 	if failed > 0 {

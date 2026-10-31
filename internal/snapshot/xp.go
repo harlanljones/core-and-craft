@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"math"
+	"sort"
 	"time"
 
 	"github.com/harlanljones/core-and-craft/internal/event"
@@ -70,6 +71,7 @@ type xpInputs struct {
 	runsByDay map[string]map[string]int // skill id -> date -> qualifying runs
 	skills    []Skill
 	quests    map[string]Quest
+	notes     map[string]event.Event // subject -> the note.added that earns its xp
 }
 
 // gains lists every xp award from the live log.
@@ -88,12 +90,10 @@ func gains(live []event.Event, in xpInputs, loc *time.Location) []xpGain {
 			}
 			out = append(out, xpGain{date, e.Pillar, xp})
 		case noteAddedKind:
-			// Once per note: a new version (supersedes) earns nothing more,
-			// and a shared node (notes/nodes/) is filed from a note that
-			// already earned it.
-			p, _ := decode(e.Data)["path"].(string)
-			if folder, _, _ := event.NotePath(p); !noted[e.Subject] && folder != event.NodesDir {
-				out = append(out, xpGain{date, e.Pillar, xpNoteAdded})
+			// Once per live note, on the date and pillar of its first
+			// version, even after a new one supersedes it.
+			if first, ok := in.notes[e.Subject]; ok && !noted[e.Subject] {
+				out = append(out, xpGain{first.LocalDate(loc), first.Pillar, xpNoteAdded})
 			}
 			noted[e.Subject] = true
 		case checkinAnswered:
@@ -126,6 +126,35 @@ func gains(live []event.Event, in xpInputs, loc *time.Location) []xpGain {
 		}
 		if sk.Passed {
 			out = append(out, xpGain{dateOf(sk.PassedAt, loc), sk.Pillar, xpSkillPassed})
+		}
+	}
+	return out
+}
+
+// firstNotes is, per subject, the first note.added filed under a pillar
+// folder that isn't retracted, superseded or not. A shared node
+// (notes/nodes/) earns nothing: it's split out of a note that already
+// earned it. evs is the whole log.
+func firstNotes(evs []event.Event) map[string]event.Event {
+	evs = append([]event.Event(nil), evs...)
+	sort.SliceStable(evs, func(i, j int) bool { return evs[i].Seq < evs[j].Seq })
+	retracted := map[string]bool{}
+	for _, e := range evs {
+		if e.Kind == retractedKind {
+			retracted[e.Subject] = true
+		}
+	}
+	out := map[string]event.Event{}
+	for _, e := range evs {
+		if e.Kind != noteAddedKind || retracted[e.ID] {
+			continue
+		}
+		if _, ok := out[e.Subject]; ok {
+			continue
+		}
+		p, _ := decode(e.Data)["path"].(string)
+		if folder, _, _ := event.NotePath(p); folder != event.NodesDir {
+			out[e.Subject] = e
 		}
 	}
 	return out

@@ -460,7 +460,7 @@ func cmdIngest(e env, args []string) error {
 			}
 			continue
 		}
-		if err := placeNotes(plans); err != nil {
+		if err := placeNotes(e, plans); err != nil {
 			return err
 		}
 		res, err := store.Append(e.logPath(), evs)
