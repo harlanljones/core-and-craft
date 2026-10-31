@@ -90,7 +90,17 @@ func ParseFront(b []byte) (f Front, body []byte, warns []string, err error) {
 		switch {
 		case raw == "":
 			cur = k
-		case strings.HasPrefix(raw, "[") && !strings.HasPrefix(raw, "[["):
+		case strings.HasPrefix(raw, "[["):
+			// One bare link, `[[a]], [[b]]` or `[[[a]], [[b]]]`. Not valid
+			// YAML, but Obsidian users write it. An odd value is skipped
+			// with a warning rather than read as one wrong link.
+			items, err := linkList(raw)
+			if err != nil {
+				warns = append(warns, fmt.Sprintf("frontmatter line %d: %s: %v; skipped", line, k, err))
+				break
+			}
+			f.Vals[k] = items
+		case strings.HasPrefix(raw, "["):
 			items, err := flowList(raw)
 			if err != nil {
 				return f, nil, warns, fmt.Errorf("frontmatter line %d: %s: %v", line, k, err)
@@ -167,7 +177,52 @@ func flowList(s string) ([]string, error) {
 	if !strings.HasSuffix(s, "]") {
 		return nil, fmt.Errorf("unclosed [")
 	}
-	inner := s[1 : len(s)-1]
+	return splitList(s[1 : len(s)-1])
+}
+
+var wholeLinkRe = regexp.MustCompile(`^\[\[[^\[\]]+\]\]$`)
+
+// linkList reads a value that starts with [[: one link, `[[a]], [[b]]` or
+// `[[[a]], [[b]]]`. Every item must be a whole [[link]].
+func linkList(s string) ([]string, error) {
+	s = cutComment(s)
+	var items []string
+	var err error
+	if strings.HasPrefix(s, "[[[") {
+		items, err = flowList(s)
+	} else {
+		items, err = splitList(s)
+	}
+	if err != nil {
+		return nil, err
+	}
+	for _, it := range items {
+		if !wholeLinkRe.MatchString(it) {
+			return nil, fmt.Errorf("can't read %q as [[links]]", s)
+		}
+	}
+	return items, nil
+}
+
+// cutComment drops a trailing # comment that sits outside any brackets.
+func cutComment(s string) string {
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		switch {
+		case s[i] == '[':
+			depth++
+		case s[i] == ']':
+			depth--
+		case s[i] == '#' && depth <= 0 && i > 0 && (s[i-1] == ' ' || s[i-1] == '\t'):
+			return strings.TrimSpace(s[:i])
+		}
+	}
+	return s
+}
+
+// splitList splits a, "b", [[c]] at the commas outside quotes and [[links]].
+// A quote only opens at the start of an item, so [[Luther's Theses]] is safe.
+func splitList(inner string) ([]string, error) {
 	var items []string
 	var cur strings.Builder
 	depth := 0
@@ -192,7 +247,7 @@ func flowList(s string) ([]string, error) {
 			if c == quote {
 				quote = 0
 			}
-		case c == '"' || c == '\'':
+		case (c == '"' || c == '\'') && strings.TrimSpace(cur.String()) == "":
 			quote = c
 		case c == '[':
 			depth++

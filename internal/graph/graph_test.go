@@ -153,3 +153,137 @@ func TestBuild(t *testing.T) {
 		t.Fatalf("summary %+v", s)
 	}
 }
+
+func TestParseFrontLinkLists(t *testing.T) {
+	for _, c := range []struct {
+		name, line string
+		want       []string
+		warn       bool
+	}{
+		{"single bare link", "authored: [[ninety-five-theses]]", []string{"[[ninety-five-theses]]"}, false},
+		{"bare link with label", "authored: [[ninety-five-theses|95 Theses]]", []string{"[[ninety-five-theses|95 Theses]]"}, false},
+		{"bare link with comma in label", "authored: [[a|b, c]]", []string{"[[a|b, c]]"}, false},
+		{"bare link with apostrophe", "authored: [[Luther's Theses]]", []string{"[[Luther's Theses]]"}, false},
+		{"bare link, comment", "authored: [[a]] # first, maybe", []string{"[[a]]"}, false},
+		{"unquoted flow list", "teaches: [[[sola-fide]], [[sola-scriptura]]]", []string{"[[sola-fide]]", "[[sola-scriptura]]"}, false},
+		{"unquoted flow list of one", "teaches: [[[sola-fide]]]", []string{"[[sola-fide]]"}, false},
+		{"flow list with spaces", "teaches: [ [[a]], [[b]] ]", []string{"[[a]]", "[[b]]"}, false},
+		{"flow list with a quoted link", `teaches: [[[a]], "[[b]]"]`, []string{"[[a]]", "[[b]]"}, false},
+		{"two bare links", "teaches: [[a]], [[b]]", []string{"[[a]]", "[[b]]"}, false},
+		{"quoted flow list", `teaches: ["[[a]]", '[[b|B]]']`, []string{"[[a]]", "[[b|B]]"}, false},
+		{"quoted link", `authored: "[[a]]"`, []string{"[[a]]"}, false},
+		{"text between links", "teaches: [[a]] and [[b]]", nil, true},
+		{"text after link", "teaches: [[a]] (see also)", nil, true},
+		{"stray bracket", "teaches: [[[a]], [[b]]", nil, true},
+		{"unclosed link", "teaches: [[a]", nil, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f, _, warns, err := ParseFront([]byte("---\n" + c.line + "\n---\n"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			key, _, _ := strings.Cut(c.line, ":")
+			if got := f.Vals[key]; !reflect.DeepEqual(got, c.want) {
+				t.Errorf("vals %#v, want %#v", got, c.want)
+			}
+			if c.warn != (len(warns) > 0) {
+				t.Errorf("warns %v, want warning: %v", warns, c.warn)
+			}
+			if c.warn && !strings.Contains(warns[0], "skipped") {
+				t.Errorf("warn %q", warns[0])
+			}
+		})
+	}
+	// Block lists keep working, with or without quotes.
+	f, _, warns, err := ParseFront([]byte("---\nteaches:\n  - \"[[a]]\"\n  - [[b]]\n---\n"))
+	if err != nil || len(warns) != 0 || !reflect.DeepEqual(f.Vals["teaches"], []string{"[[a]]", "[[b]]"}) {
+		t.Fatalf("block list: %#v %v %v", f.Vals, warns, err)
+	}
+}
+
+func TestTargetFiles(t *testing.T) {
+	for _, in := range []string{
+		"[[diagram.png]]", "[[assets/Diagram.PNG|big]]", "[[paper.pdf#page=3]]", "photo.jpg", "[[clip.mp4]]",
+	} {
+		if got, ok := Target(in); ok {
+			t.Errorf("Target(%q) = %q, want no note", in, got)
+		}
+		if !isFileLink(in) {
+			t.Errorf("isFileLink(%q) = false", in)
+		}
+	}
+	for in, want := range map[string]string{
+		"[[sola-fide.md]]":  "note:sola-fide",
+		"[[Node.js]]":       "note:node-js",
+		"[[Genesis 1.1]]":   "note:genesis-1-1",
+		"[[St. Augustine]]": "note:st-augustine",
+		"[[nodes/x.md]]":    "note:x",
+	} {
+		if got, ok := Target(in); !ok || got != want {
+			t.Errorf("Target(%q) = %q, %v, want %q", in, got, ok, want)
+		}
+		if isFileLink(in) {
+			t.Errorf("isFileLink(%q) = true", in)
+		}
+	}
+}
+
+func TestStripCode(t *testing.T) {
+	for _, c := range []struct{ name, in, gone, kept string }{
+		{"inline", "see `[[x]]` and [[y]]", "[[x]]", "[[y]]"},
+		{"double backticks", "see ``a ` [[x]]`` and [[y]]", "[[x]]", "[[y]]"},
+		{"backtick fence", "a [[y]]\n```go\n[[x]]\n```\nb", "[[x]]", "[[y]]"},
+		{"tilde fence", "a [[y]]\n~~~\n[[x]]\n~~~\nb", "[[x]]", "[[y]]"},
+		{"longer fence", "````\n```\n[[x]]\n```\n````\n[[y]]", "[[x]]", "[[y]]"},
+		{"indented fence", "- item\n  ```\n  [[x]]\n  ```\n  [[y]]", "[[x]]", "[[y]]"},
+		{"unclosed fence", "[[y]]\n```\n[[x]]\n", "[[x]]", "[[y]]"},
+		{"lone backtick", "it`s [[y]] fine\n\nand `[[z]]`", "[[z]]", "[[y]]"},
+		{"span on a fence-like line", "```[[x]]``` [[y]]", "[[x]]", "[[y]]"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			got := stripCode(c.in)
+			if strings.Contains(got, c.gone) || !strings.Contains(got, c.kept) {
+				t.Errorf("stripCode(%q) = %q", c.in, got)
+			}
+		})
+	}
+}
+
+func TestBuildLinks(t *testing.T) {
+	body := "---\ntype: concept\nteaches: [[[a]], [[b]]]\nsee_also: \"[[diagram.png]]\"\nauthored: [[c]]\n---\n" +
+		"![[diagram.png]] ![[paper.pdf]] ![[other-note]] [[real]]\n" +
+		"`[[inline]]`\n\n```\n[[fenced]]\n```\n\n~~~\n[[tilde]]\n~~~\n"
+	g := Build(Input{Notes: []Note{{ID: "note:n", Path: "notes/nodes/n.md", Content: []byte(body)}}}, "")
+	edges := map[string]bool{}
+	for _, e := range g.Edges {
+		edges[e.Via+" "+e.Type+" "+e.To] = true
+	}
+	for _, want := range []string{
+		"frontmatter teaches note:a", "frontmatter teaches note:b", "frontmatter authored note:c",
+		"body mentions note:other-note", "body mentions note:real",
+	} {
+		if !edges[want] {
+			t.Errorf("missing %s", want)
+		}
+	}
+	for _, bad := range []string{"note:diagram-png", "note:paper-pdf", "note:inline", "note:fenced", "note:tilde", "note:a-b", "note:a-b-c"} {
+		for k := range edges {
+			if strings.HasSuffix(k, " "+bad) {
+				t.Errorf("unexpected edge %s", k)
+			}
+		}
+		for _, n := range g.Nodes {
+			if n.ID == bad {
+				t.Errorf("unexpected node %s", n.ID)
+			}
+		}
+	}
+	var msgs []string
+	for _, p := range g.Errors {
+		msgs = append(msgs, p.Msg)
+	}
+	all := strings.Join(msgs, "\n")
+	if !strings.Contains(all, "see_also: [[diagram.png]] is a file, not a note") {
+		t.Errorf("errors lack the file problem:\n%s", all)
+	}
+}
